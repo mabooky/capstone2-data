@@ -6,7 +6,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| `fetch_spotify_tracks.py` | DB의 곡을 SpotifyScraper로 조회해 한글 표기를 포함한 응답을 `data/spotify-tracks.jsonl`에 저장합니다. DB는 읽기만 합니다. |
+| `fetch_spotify_tracks.py` | DB의 곡을 SpotifyScraper로 조회해 한글 표기를 포함한 응답을 `data/spotify_tracks.jsonl`에 저장합니다. DB는 읽기만 합니다. |
 | `db.py` | `DATABASE_URL`로 DB에 접속합니다. |
 
 `tracks_v3` 테이블의 정의는 capstone2-backend의 `src/db/schema.sql`이 기준입니다. 이 프로젝트는 만들어진 테이블에만 접속하며, 컬럼이 바뀌면 두 곳을 함께 확인해야 합니다.
@@ -36,9 +36,10 @@ python fetch_spotify_tracks.py --country-codes=KR,KS
 | `--locale` | 표기 언어(BCP-47)입니다. 기본값은 `ko`입니다. |
 | `--concurrency` | 동시 요청 수입니다. 기본값은 3입니다. |
 | `--limit` | 이번 실행에서 조회할 최대 곡 수입니다. 처음에는 `--limit 20`으로 소량만 실행해 보기를 권합니다. |
-| `--output` | 결과 파일 경로입니다. 기본값은 `data/spotify-tracks.jsonl`입니다. |
+| `--output` | 결과 파일 경로입니다. 기본값은 `data/spotify_tracks.jsonl`입니다. |
 
 - 곡마다 한 줄씩 기록하며, 이미 기록된 곡은 건너뜁니다. 중단해도 다시 실행하면 이어서 진행합니다.
+- 진행 막대에 전체 대상 중 처리한 곡 수(예: 1,200/33,900), 남은 시간, 성공·없음·실패 수가 실시간으로 표시됩니다.
 - Ctrl+C를 한 번 누르면 진행 중인 요청만 마치고 멈춥니다.
 - 존재하지 않는 곡은 `status: not_found`로 기록해 다시 요청하지 않습니다. 그 밖의 실패는 기록하지 않으므로 다시 실행하면 재시도합니다.
 - 연속으로 20곡이 실패하면 차단이나 장애로 보고 중단합니다.

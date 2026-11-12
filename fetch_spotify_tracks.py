@@ -1,4 +1,4 @@
-"""tracks_v3의 곡을 SpotifyScraper로 조회해 응답을 data/spotify-tracks.jsonl에 저장합니다.
+"""tracks_v3의 곡을 SpotifyScraper로 조회해 응답을 data/spotify_tracks.jsonl에 저장합니다.
 
     python fetch_spotify_tracks.py [--country-codes=KR,KS] [--locale ko] [--concurrency 3] [--limit 개수] [--output 파일]
 
@@ -19,14 +19,14 @@ from pathlib import Path
 
 from spotify_scraper import AsyncSpotifyClient
 from spotify_scraper.errors import NotFoundError, RateLimitedError
+from tqdm import tqdm
 
 from db import connect
 
-DEFAULT_OUTPUT = Path(__file__).resolve().parent / "data" / "spotify-tracks.jsonl"
+DEFAULT_OUTPUT = Path(__file__).resolve().parent / "data" / "spotify_tracks.jsonl"
 RATE_LIMIT_PAUSE_SEC = 60  # 서버가 대기 시간을 알려 주지 않을 때 쉬는 시간
 MAX_RATE_LIMIT_RETRIES = 3
 MAX_CONSECUTIVE_FAILURES = 20  # 연속으로 이만큼 실패하면 차단이나 장애로 보고 중단합니다.
-PROGRESS_INTERVAL = 100
 
 
 def parse_args() -> argparse.Namespace:
@@ -77,43 +77,35 @@ def read_done_ids(path: Path) -> set[str]:
 
 
 class Progress:
-    def __init__(self, total: int) -> None:
-        self.total = total
+    """처리 결과를 세고 진행 막대에 표시합니다."""
+
+    def __init__(self, bar: tqdm) -> None:
+        self.bar = bar
         self.ok = 0
         self.not_found = 0
         self.failed = 0
         self.consecutive_failures = 0
-        self.started = time.monotonic()
 
-    @property
-    def processed(self) -> int:
-        return self.ok + self.not_found + self.failed
-
-    def report(self) -> None:
-        elapsed = time.monotonic() - self.started
-        rate = self.processed / elapsed if elapsed > 0 else 0
-        remaining = (self.total - self.processed) / rate if rate > 0 else 0
-        print(
-            f"  {self.processed}/{self.total}곡 처리 (성공 {self.ok}, 없음 {self.not_found}, 실패 {self.failed}) "
-            f"- 초당 {rate:.2f}곡, 남은 시간 약 {remaining / 60:.0f}분",
-            flush=True,
-        )
+    def advance(self) -> None:
+        self.bar.update(1)
+        self.bar.set_postfix(성공=self.ok, 없음=self.not_found, 실패=self.failed)
 
 
-async def fetch_all(args: argparse.Namespace, track_ids: list[str]) -> None:
+async def fetch_all(args: argparse.Namespace, track_ids: list[str], already: int) -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     queue: asyncio.Queue[str] = asyncio.Queue()
     for track_id in track_ids:
         queue.put_nowait(track_id)
 
-    progress = Progress(len(track_ids))
+    bar = tqdm(total=already + len(track_ids), initial=already, unit="곡", dynamic_ncols=True)
+    progress = Progress(bar)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     # 첫 Ctrl+C는 진행 중인 요청만 마치고 멈추며, 한 번 더 누르면 즉시 종료합니다.
     def on_interrupt() -> None:
         stop.set()
         loop.remove_signal_handler(signal.SIGINT)
-        print("\n중단합니다. 진행 중인 요청을 마치는 중입니다. (한 번 더 누르면 즉시 종료합니다.)", flush=True)
+        tqdm.write("중단합니다. 진행 중인 요청을 마치는 중입니다. (한 번 더 누르면 즉시 종료합니다.)")
 
     loop.add_signal_handler(signal.SIGINT, on_interrupt)
 
@@ -129,15 +121,16 @@ async def fetch_all(args: argparse.Namespace, track_ids: list[str]) -> None:
                 write({"spotify_id": track_id, "status": "not_found", "fetched_at": datetime.now(timezone.utc).isoformat()})
                 progress.not_found += 1
                 progress.consecutive_failures = 0
+                progress.advance()
                 return
             except RateLimitedError as error:
                 if attempt == MAX_RATE_LIMIT_RETRIES:
                     break
                 wait = error.retry_after or RATE_LIMIT_PAUSE_SEC
-                print(f"  요청 제한을 받아 {wait:.0f}초 쉽니다. ({track_id})", flush=True)
+                tqdm.write(f"요청 제한을 받아 {wait:.0f}초 쉽니다. ({track_id})")
                 await asyncio.sleep(wait)
             except Exception as error:  # 어떤 실패도 한 곡의 실패로만 다루고 다음 곡으로 넘어갑니다.
-                print(f"  실패: {track_id} - {type(error).__name__}: {str(error)[:120]}", flush=True)
+                tqdm.write(f"실패: {track_id} - {type(error).__name__}: {str(error)[:120]}")
                 break
             else:
                 write({
@@ -149,11 +142,13 @@ async def fetch_all(args: argparse.Namespace, track_ids: list[str]) -> None:
                 })
                 progress.ok += 1
                 progress.consecutive_failures = 0
+                progress.advance()
                 return
         progress.failed += 1
         progress.consecutive_failures += 1
+        progress.advance()
         if progress.consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-            print(f"연속 {MAX_CONSECUTIVE_FAILURES}곡이 실패해 중단합니다. 차단되었거나 Spotify 쪽 장애일 수 있습니다.", flush=True)
+            tqdm.write(f"연속 {MAX_CONSECUTIVE_FAILURES}곡이 실패해 중단합니다. 차단되었거나 Spotify 쪽 장애일 수 있습니다.")
             stop.set()
 
     async def worker(client: AsyncSpotifyClient) -> None:
@@ -162,14 +157,14 @@ async def fetch_all(args: argparse.Namespace, track_ids: list[str]) -> None:
                 track_id = queue.get_nowait()
             except asyncio.QueueEmpty:
                 return
-            before = progress.processed
             await fetch_one(client, track_id)
-            if progress.processed // PROGRESS_INTERVAL > before // PROGRESS_INTERVAL:
-                progress.report()
 
-    with args.output.open("a", encoding="utf-8") as output:
-        async with AsyncSpotifyClient(locale=args.locale) as client:
-            await asyncio.gather(*(worker(client) for _ in range(args.concurrency)))
+    try:
+        with args.output.open("a", encoding="utf-8") as output:
+            async with AsyncSpotifyClient(locale=args.locale) as client:
+                await asyncio.gather(*(worker(client) for _ in range(args.concurrency)))
+    finally:
+        bar.close()
 
     state = "중단되었습니다" if stop.is_set() else "끝났습니다"
     print(f"\n{state}. 성공 {progress.ok}곡, 없음 {progress.not_found}곡, 실패 {progress.failed}곡 (실패한 곡은 다시 실행하면 재시도합니다.)")
@@ -190,7 +185,7 @@ def main() -> None:
     if not pending:
         print("조회할 곡이 없습니다.")
         return
-    asyncio.run(fetch_all(args, pending))
+    asyncio.run(fetch_all(args, pending, already))
 
 
 if __name__ == "__main__":
