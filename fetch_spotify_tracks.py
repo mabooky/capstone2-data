@@ -1,11 +1,13 @@
-"""tracks_v3의 곡을 SpotifyScraper로 조회해 응답을 data/spotify_tracks.jsonl에 저장합니다.
+"""tracks_v3의 곡을 SpotifyScraper로 조회해 data/spotify_tracks.jsonl에 저장하고, 제목과 아티스트를 DB에 반영합니다.
 
     python fetch_spotify_tracks.py [--country-codes=KR,KS] [--locale ko] [--concurrency 3] [--limit 개수] [--output 파일]
 
 - --country-codes: ISRC가 지정한 국가 코드로 시작하는 곡만 조회합니다. 지정하지 않으면 모든 곡을 조회합니다.
-- 곡마다 한 줄씩 기록하고, 이미 기록된 곡은 건너뜁니다. 중단해도 다시 실행하면 이어서 진행합니다.
+- 곡마다 한 줄씩 기록하고, 이미 기록된 곡은 다시 조회하지 않습니다. 중단해도 다시 실행하면 이어서 진행합니다.
 - 존재하지 않는 곡(not_found)은 기록해 두어 다시 요청하지 않습니다. 그 밖의 실패는 기록하지 않으므로 다시 실행하면 재시도합니다.
-- DB는 읽기만 하며, 요청 속도는 SpotifyScraper의 기본 제한과 재시도 정책을 따릅니다.
+- DB 반영: 실행할 때마다 JSONL에 있는 모든 곡의 title과 artist를 Spotify 값으로 덮어쓴 뒤 조회를 시작하고,
+  새로 받은 곡도 받는 즉시 반영합니다. 실패한 곡은 JSONL에 남아 있으므로 다음 실행에서 다시 반영됩니다.
+- 요청 속도는 SpotifyScraper의 기본 제한과 재시도 정책을 따릅니다.
 """
 
 import argparse
@@ -13,7 +15,6 @@ import asyncio
 import json
 import re
 import signal
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from spotify_scraper.errors import NotFoundError, RateLimitedError
 from tqdm import tqdm
 
 from db import connect
+from db_sync import DbSync
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "data" / "spotify_tracks.jsonl"
 RATE_LIMIT_PAUSE_SEC = 60  # 서버가 대기 시간을 알려 주지 않을 때 쉬는 시간
@@ -63,24 +65,26 @@ def select_track_ids(country_codes: list[str] | None) -> list[str]:
     return [row[0] for row in rows]
 
 
-def read_done_ids(path: Path) -> set[str]:
-    """이미 기록된 곡의 ID를 읽습니다. 중단되어 일부만 기록된 마지막 줄은 무시합니다."""
-    done: set[str] = set()
+def read_records(path: Path) -> dict[str, dict]:
+    """JSONL의 기록을 곡 ID별로 읽습니다. 중단되어 일부만 기록된 줄은 무시하고, 같은 곡이 여럿이면 마지막 기록을 씁니다."""
+    records: dict[str, dict] = {}
     if not path.is_file():
-        return done
+        return records
     for line in path.read_text(encoding="utf-8").splitlines():
         try:
-            done.add(json.loads(line)["spotify_id"])
-        except (json.JSONDecodeError, KeyError):
+            record = json.loads(line)
+            records[record["spotify_id"]] = record
+        except (json.JSONDecodeError, KeyError, TypeError):
             continue
-    return done
+    return records
 
 
 class Progress:
     """처리 결과를 세고 진행 막대에 표시합니다."""
 
-    def __init__(self, bar: tqdm) -> None:
+    def __init__(self, bar: tqdm, sync: DbSync) -> None:
         self.bar = bar
+        self.sync = sync
         self.ok = 0
         self.not_found = 0
         self.failed = 0
@@ -88,17 +92,17 @@ class Progress:
 
     def advance(self) -> None:
         self.bar.update(1)
-        self.bar.set_postfix(성공=self.ok, 없음=self.not_found, 실패=self.failed)
+        self.bar.set_postfix(성공=self.ok, 없음=self.not_found, 실패=self.failed, DB변경=self.sync.changed, DB실패=self.sync.failed)
 
 
-async def fetch_all(args: argparse.Namespace, track_ids: list[str], already: int) -> None:
+async def fetch_all(args: argparse.Namespace, track_ids: list[str], already: int, sync: DbSync) -> None:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     queue: asyncio.Queue[str] = asyncio.Queue()
     for track_id in track_ids:
         queue.put_nowait(track_id)
 
     bar = tqdm(total=already + len(track_ids), initial=already, unit="곡", dynamic_ncols=True)
-    progress = Progress(bar)
+    progress = Progress(bar, sync)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     # 첫 Ctrl+C는 진행 중인 요청만 마치고 멈추며, 한 번 더 누르면 즉시 종료합니다.
@@ -133,13 +137,16 @@ async def fetch_all(args: argparse.Namespace, track_ids: list[str], already: int
                 tqdm.write(f"실패: {track_id} - {type(error).__name__}: {str(error)[:120]}")
                 break
             else:
+                data = track.to_dict()
+                # JSONL에 먼저 기록해 두면 DB 반영이 실패해도 다음 실행에서 다시 반영됩니다.
                 write({
                     "spotify_id": track_id,
                     "status": "ok",
                     "locale": args.locale,
                     "fetched_at": datetime.now(timezone.utc).isoformat(),
-                    "track": track.to_dict(),
+                    "track": data,
                 })
+                await sync.apply_one(track_id, data)
                 progress.ok += 1
                 progress.consecutive_failures = 0
                 progress.advance()
@@ -168,24 +175,37 @@ async def fetch_all(args: argparse.Namespace, track_ids: list[str], already: int
 
     state = "중단되었습니다" if stop.is_set() else "끝났습니다"
     print(f"\n{state}. 성공 {progress.ok}곡, 없음 {progress.not_found}곡, 실패 {progress.failed}곡 (실패한 곡은 다시 실행하면 재시도합니다.)")
+    print(f"DB 반영: 변경 {sync.changed:,}곡, 건너뜀 {sync.skipped:,}곡, 실패 {sync.failed:,}곡 (실패한 곡은 다시 실행하면 JSONL에서 다시 반영합니다.)")
     print(f"결과 파일: {args.output}")
+
+
+async def run(args: argparse.Namespace, records: dict[str, dict], pending: list[str], already: int) -> None:
+    sync = await DbSync.open()
+    try:
+        # JSONL에 있는 곡은 조회 대상과 상관없이 모두 DB에 반영합니다.
+        saved = [(track_id, record["track"]) for track_id, record in records.items() if record.get("status") == "ok" and "track" in record]
+        print(f"JSONL의 {len(saved):,}곡을 DB에 반영합니다. (title, artist를 Spotify 값으로 덮어씁니다.)")
+        await sync.apply_records(saved)
+        if pending:
+            await fetch_all(args, pending, already, sync)
+        else:
+            print("새로 조회할 곡이 없습니다.")
+    finally:
+        await sync.close()
 
 
 def main() -> None:
     args = parse_args()
     track_ids = select_track_ids(args.country_codes)
-    done = read_done_ids(args.output)
-    pending = [track_id for track_id in track_ids if track_id not in done]
+    records = read_records(args.output)
+    pending = [track_id for track_id in track_ids if track_id not in records]
     if args.limit is not None:
         pending = pending[: args.limit]
 
     scope = ",".join(args.country_codes) if args.country_codes else "전체"
-    already = sum(1 for track_id in track_ids if track_id in done)
+    already = sum(1 for track_id in track_ids if track_id in records)
     print(f"대상({scope}) {len(track_ids):,}곡 중 이미 기록된 {already:,}곡을 빼고 {len(pending):,}곡을 조회합니다.")
-    if not pending:
-        print("조회할 곡이 없습니다.")
-        return
-    asyncio.run(fetch_all(args, pending, already))
+    asyncio.run(run(args, records, pending, already))
 
 
 if __name__ == "__main__":
