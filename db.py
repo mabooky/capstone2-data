@@ -21,12 +21,24 @@ def load_env_file(path: Path = ENV_FILE) -> None:
         os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
-def connect() -> psycopg.Connection:
-    """DATABASE_URL로 접속합니다. 로컬 DB가 아니면 SSL로 접속하며, DATABASE_SSL=false로 끌 수 있습니다."""
+def _connection_options() -> tuple[str, str]:
+    """접속 주소와 sslmode를 정합니다. 로컬 DB가 아니면 SSL로 접속하며, DATABASE_SSL=false로 끌 수 있습니다."""
     load_env_file()
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise SystemExit("DATABASE_URL 환경변수가 필요합니다. .env를 확인해 주십시오.")
     is_local = urlparse(url).hostname in ("localhost", "127.0.0.1", "::1")
     sslmode = "disable" if is_local or os.environ.get("DATABASE_SSL") == "false" else "require"
+    return url, sslmode
+
+
+def connect() -> psycopg.Connection:
+    """DATABASE_URL로 접속합니다."""
+    url, sslmode = _connection_options()
     return psycopg.connect(url, sslmode=sslmode, connect_timeout=5)
+
+
+async def connect_async() -> psycopg.AsyncConnection:
+    """DATABASE_URL로 비동기 접속합니다. 문장마다 바로 커밋하는 연결입니다."""
+    url, sslmode = _connection_options()
+    return await psycopg.AsyncConnection.connect(url, sslmode=sslmode, connect_timeout=5, autocommit=True)
