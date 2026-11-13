@@ -3,6 +3,9 @@
 __pycache__/
 *.pyc
 
+# Node 의존성
+node_modules/
+
 # 접속 정보
 .env
 .env.*

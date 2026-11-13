@@ -1,0 +1,8 @@
+{
+  "name": "capstone2-data-v2",
+  "private": true,
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "packageManager": "pnpm@12.18.0"
+}
