@@ -7,8 +7,8 @@
 //   --limit <개수>: 앞에서부터 지정한 수의 시드만 처리
 //   --top <개수>: 아티스트당 인기도 상위 곡만 유지. 기본값은 전체
 //   --show <개수>: 미리보기에서 아티스트별 인기도 상위 곡을 출력
-//   --tracks-file <파일>: 수집한 곡 목록(JSON). 기본값은 v3/data/collected_tracks.json
-//   --features-file <파일>: 받은 오디오 값(JSONL). 기본값은 v3/data/audio_features.jsonl
+//   --tracks-file <파일>: 수집한 곡 목록(JSON). 기본값은 v3/data/collected-tracks.json
+//   --features-file <파일>: 받은 오디오 값(JSONL). 기본값은 v3/data/audio-features.jsonl
 //   --yes: DB에 적재합니다. 지정하지 않으면 DB를 변경하지 않습니다.
 //
 // 단계
@@ -37,8 +37,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_SEED_CSV = resolve(HERE, 'seed-artists.csv');
 // 수집한 곡 목록과 오디오 값은 git에 올리지 않도록 data 폴더에 둡니다.
 const DATA_DIR = resolve(HERE, 'data');
-const DEFAULT_TRACKS_FILE = resolve(DATA_DIR, 'collected_tracks.json');
-const DEFAULT_FEATURES_FILE = resolve(DATA_DIR, 'audio_features.jsonl');
+const DEFAULT_TRACKS_FILE = resolve(DATA_DIR, 'collected-tracks.json');
+const DEFAULT_FEATURES_FILE = resolve(DATA_DIR, 'audio-features.jsonl');
 const API_BASE_URL = 'https://api.reccobeats.com/v1';
 const TABLE = 'tracks_v3';
 

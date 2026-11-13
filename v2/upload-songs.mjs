@@ -1,4 +1,4 @@
-// ReccoBeats 수집 결과(reccobeats_raw.jsonl)와 songs.jsonl의 좌표를 합쳐서 Postgres의 songs 테이블에 올립니다.
+// ReccoBeats 수집 결과(reccobeats-raw.jsonl)와 songs.jsonl의 좌표를 합쳐서 Postgres의 songs 테이블에 올립니다.
 // 한국(KR)에서 재생할 수 없다고 표시된 곡과 응답이 없는 곡은 올리지 않습니다.
 //
 // 사용법:
@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SONGS_PATH = fileURLToPath(new URL('../v1/data/songs.jsonl', import.meta.url));
 const SCHEMA_PATH = fileURLToPath(new URL('./schema.sql', import.meta.url));
-const DEFAULT_RAW_PATH = fileURLToPath(new URL('./data/reccobeats_raw.jsonl', import.meta.url));
+const DEFAULT_RAW_PATH = fileURLToPath(new URL('./data/reccobeats-raw.jsonl', import.meta.url));
 
 const COLUMNS = ['spotify_id', 'reccobeats_id', 'title', 'artist', 'duration_ms', 'popularity', 'valence', 'energy'];
 const SPOTIFY_ID_PATTERN = /^[0-9A-Za-z]{22}$/;

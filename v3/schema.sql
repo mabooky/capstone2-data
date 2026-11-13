@@ -1,6 +1,6 @@
 -- 데이터셋 v3를 적재하던 시점(2026-11-12)의 tracks_v3 테이블 정의입니다. 보존용 기록이며 데이터는 포함하지 않습니다.
 -- capstone2-backend의 src/db/schema.sql에서 tracks_v3 부분만 가져온 것(커밋 fd88562 시점)이고,
--- data/tracks_v3_20261112_153244.dump의 테이블 구조와 같습니다.
+-- data/tracks-v3-20261112-153244.dump의 테이블 구조와 같습니다.
 -- 이후 artist_reccobeats_ids는 artist_spotify_ids로, popularity는 play_count로 바뀌었으므로 현재 구조는 backend의 schema.sql을 따릅니다.
 -- load-tracks.mjs는 이 구조를 전제로 적재합니다.
 

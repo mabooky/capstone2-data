@@ -5,7 +5,7 @@
 //   node v2/fetch-reccobeats-metadata.mjs --probe
 //   node v2/fetch-reccobeats-metadata.mjs [--out <결과 파일 경로>] [--limit 200] [--concurrency 2]
 //
-// 결과 파일의 기본 위치는 이 스크립트와 같은 위치의 data/reccobeats_raw.jsonl 입니다. 이 폴더는 .gitignore에 포함되어 커밋되지 않습니다.
+// 결과 파일의 기본 위치는 이 스크립트와 같은 위치의 data/reccobeats-raw.jsonl 입니다. 이 폴더는 .gitignore에 포함되어 커밋되지 않습니다.
 // 시험용 환경변수: RECCOBEATS_API_BASE_URL (가짜 서버로 동작을 확인할 때 사용합니다)
 // ReccoBeats의 데이터 저장·재사용 조건은 직접 확인해 주십시오.
 //
@@ -18,7 +18,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SONGS_PATH = new URL('../v1/data/songs.jsonl', import.meta.url);
-const DEFAULT_OUT_PATH = fileURLToPath(new URL('./data/reccobeats_raw.jsonl', import.meta.url));
+const DEFAULT_OUT_PATH = fileURLToPath(new URL('./data/reccobeats-raw.jsonl', import.meta.url));
 const API_BASE_URL = process.env.RECCOBEATS_API_BASE_URL ?? 'https://api.reccobeats.com/v1';
 const BATCH_SIZE = 40;
 const MAX_ATTEMPTS = 6;
