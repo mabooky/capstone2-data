@@ -35,11 +35,13 @@ python v4/collect_seed_artists.py --yes    # CSV 끝에 덧붙이기
 | 1 | `fetch_discographies.py` | `seed-artists.csv` | `data/discographies.jsonl` |
 | 2 | `fetch_albums.py` | `data/discographies.jsonl` | `data/albums.jsonl` |
 | 3 | `flatten_tracks.py` | `data/albums.jsonl` | `data/tracks.jsonl` |
+| 4 | `fetch_audio_features.py` | `data/tracks.jsonl` | `data/audio_features.jsonl` |
 
 ```bash
 python v4/fetch_discographies.py
 python v4/fetch_albums.py
 python v4/flatten_tracks.py
+python v4/fetch_audio_features.py
 ```
 
 ### 1. 아티스트별 디스코그래피
@@ -63,6 +65,19 @@ python v4/flatten_tracks.py
 
 앨범 안의 곡 순서는 담지 않습니다. `albums.jsonl`의 수록곡 배열 순서가 그 순서입니다.
 
+### 4. 오디오 특징
+
+곡의 Spotify ID를 40개씩 묶어 ReccoBeats에서 오디오 특징을 조회합니다. ReccoBeats에 있는 곡마다 한 줄을 기록합니다.
+
+```json
+{"spotify_id", "reccobeats_id", "isrc", "acousticness", "danceability", "energy", "instrumentalness",
+ "key", "liveness", "loudness", "mode", "speechiness", "tempo", "valence"}
+```
+
+이 파일에서만 ID에 `spotify_`, `reccobeats_` 접두사를 붙입니다. 한 줄에 서로 다른 ID가 둘 있기 때문입니다.
+ReccoBeats에 값이 없는 곡은 기록하지 않으므로 다시 실행하면 다시 요청합니다. 요청이 실패한 곡도 기록하지 않아 파일만으로는 두 경우를 구분할 수 없습니다.
+따라서 실행이 끝날 때 출력되는 **실패 수가 0이 될 때까지** 다시 실행한 뒤 다음 단계로 넘어갑니다.
+
 ## 수집 스크립트의 공통 동작
 
 - 이미 기록된 항목은 다시 조회하지 않으므로, 중간에 멈춰도 같은 명령을 다시 실행하면 이어서 진행합니다. Ctrl+C를 한 번 누르면 진행 중인 요청만 마치고 멈춥니다.
@@ -76,6 +91,6 @@ python v4/flatten_tracks.py
 
 ## 아직 없는 단계
 
-- 곡별 valence, energy 수집(ReccoBeats)
+- ReccoBeats에 있는 곡만 남기는 정제
 - 같은 곡의 중복 묶음 처리
 - DB 적재
