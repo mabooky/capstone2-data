@@ -1,6 +1,6 @@
 """디스코그래피의 모든 앨범을 SpotifyScraper로 조회해 data/albums.jsonl에 저장합니다.
 
-    python v4/fetch_albums.py [--concurrency 3] [--limit 개수] [--input 파일] [--output 파일]
+    python v4/fetch_albums.py [--concurrency 3] [--locale ko] [--limit 개수] [--input 파일] [--output 파일]
 
 - data/discographies.jsonl에 있는 모든 앨범 ID를 중복 없이 모아 get_album을 호출합니다. 앨범 유형(앨범, 싱글, EP, 컴필레이션)은 가리지 않습니다.
 - 앨범마다 한 줄을 `{"album_id": 요청한 ID, "album": {응답 그대로}}` 형식으로 기록합니다.
@@ -8,6 +8,8 @@
 - 이미 기록된 앨범은 다시 조회하지 않습니다. 중단해도 다시 실행하면 이어서 진행합니다.
 - 기록되지 않은 앨범은 실패한 것으로 보고 다시 실행할 때 재시도합니다. 존재하지 않는 앨범도 기록하지 않으므로 매번 다시 요청합니다.
 - 요청 속도는 --concurrency로 조절하며, 요청이 제한되면 쉬었다가 몇 번 다시 시도합니다.
+- 아티스트 이름의 표기 언어는 --locale(BCP-47 언어 태그, 기본값 ko)로 정합니다. 지정하지 않으면 영어 표기로 받습니다.
+  언어를 바꿔 다시 받을 때는 이미 기록된 앨범을 건너뛰므로 기존 출력 파일을 먼저 치워야 합니다.
 """
 
 import argparse
@@ -31,6 +33,7 @@ MAX_CONSECUTIVE_FAILURES = 20  # 연속으로 이만큼 실패하면 차단이�
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="디스코그래피의 모든 앨범을 조회해 저장합니다.")
     parser.add_argument("--concurrency", type=int, default=3, help="동시 요청 수. 기본값은 3")
+    parser.add_argument("--locale", default="ko", help="이름의 표기 언어(BCP-47). 기본값은 ko")
     parser.add_argument("--limit", type=int, help="이번 실행에서 조회할 최대 앨범 수")
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="디스코그래피 JSONL 파일")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="결과 JSONL 파일")
@@ -113,7 +116,7 @@ async def fetch_all(args: argparse.Namespace, album_ids: list[str], already: int
     async def fetch_one(client: AsyncSpotifyClient, album_id: str) -> None:
         for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
             try:
-                album = await client.get_album(album_id)
+                album = await client.get_album(album_id, locale=args.locale)
             except NotFoundError:
                 stats["not_found"] += 1
                 stats["consecutive_failures"] = 0  # 앨범이 없는 것은 차단이나 장애의 신호가 아닙니다.
