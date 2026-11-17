@@ -13,6 +13,21 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## 시드 아티스트 목록
+
+수집 대상은 `seed-artists.csv`(`아티스트,아티스트 Spotify ID`)에 적힌 한국 아티스트이며, 이 파일은 저장소에 포함되어 있습니다. 다음 순서로 만들어졌습니다.
+
+1. 처음 623행(머리글 포함)은 직접 수집했습니다. (커밋 `288e82f`)
+2. 그 뒤는 `collect_seed_artists.py`로 Spotify 공식 차트 플레이리스트(주간 차트, Hot Hits Korea, 바이럴 히트, K-Pop ON! 등)의 아티스트 중 목록에 없는 아티스트를 찾아 덧붙였습니다. (커밋 `187ea69`, 2026-11-15 실행)
+3. 이후 중복 행과 해외 아티스트를 제거해 지금의 목록이 되었습니다. (커밋 `96c03b6`, `ede9039`)
+
+차트는 매주 바뀌어 스크립트를 다시 실행하면 결과가 달라지므로, 데이터를 재현할 때는 이 파일을 그대로 사용하고 스크립트는 실행하지 않습니다. 목록을 늘리고 싶을 때만 실행하며, `--yes`를 붙이지 않으면 CSV를 바꾸지 않고 추가될 아티스트를 미리 보여 주기만 합니다.
+
+```bash
+python v4/collect_seed_artists.py          # 추가될 아티스트 미리 보기
+python v4/collect_seed_artists.py --yes    # CSV 끝에 덧붙이기
+```
+
 ## 실행 순서
 
 | 순서 | 스크립트 | 입력 | 출력 |
@@ -57,8 +72,6 @@ python v4/flatten_tracks.py
 
 ## 다른 파일
 
-- `seed-artists.csv`: 수집 대상인 한국 아티스트 목록(`아티스트,아티스트 Spotify ID`)이며, 저장소에 포함되어 있습니다.
-- `collect_seed_artists.py`: 이 목록을 만들 때 쓴 스크립트입니다. Spotify 한국 차트의 아티스트 중 목록에 없는 아티스트를 찾아 추가합니다. 차트가 주간으로 바뀌어 실행할 때마다 결과가 다르므로 재현에는 필요하지 않습니다. 해외 아티스트는 직접 걸러냈습니다.
 - `schema.sql`: DB 테이블(`albums_v4`, `tracks_v4`) 정의입니다. 아직 DB에 적재하는 단계는 없습니다.
 
 ## 아직 없는 단계
