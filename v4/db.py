@@ -1,4 +1,7 @@
-"""곡 DB(PostgreSQL) 연결을 만듭니다. tracks_v3 테이블은 capstone2-backend의 src/db/schema.sql이 기준입니다."""
+"""v4 스크립트가 곡 DB(PostgreSQL)에 접속할 때 쓰는 공통 모듈입니다. 접속 주소는 저장소 루트의 .env에서 읽습니다.
+
+테이블 정의는 v4/schema.sql이 기준입니다. v4의 업로드 스크립트는 이 모듈로 연결을 만듭니다.
+"""
 
 import os
 from pathlib import Path
@@ -6,7 +9,7 @@ from urllib.parse import urlparse
 
 import psycopg
 
-ENV_FILE = Path(__file__).resolve().parent / ".env"
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"  # 저장소 루트의 .env
 
 
 def load_env_file(path: Path = ENV_FILE) -> None:
