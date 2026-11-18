@@ -4,8 +4,10 @@
 
 - 곡을 걸러내지 않습니다. 앨범의 수록곡을 모두 한 줄씩 옮기며, 중복 제거와 inst/MR 제외는 다음 단계에서 합니다.
 - 곡마다 한 줄을 다음 형식으로 기록합니다.
-  {"id", "title", "artists": [{"id", "name"}], "duration_ms", "play_count", "album_id", "album_thumb_url"}
+  {"id", "title", "artists": [{"id", "name"}], "duration_ms", "play_count", "album_id", "album_thumb_url",
+   "isrc", "valence", "arousal"}
   id와 artists[].id, album_id는 모두 Spotify ID이며, albums.jsonl과 같은 이름을 씁니다.
+- isrc, valence, arousal은 이 단계에서 모두 null입니다. 이후 단계가 같은 파일의 빈칸을 채웁니다.
 - 앨범 안의 곡 순서(트랙 번호, 디스크)는 곡의 속성이 아니라 앨범의 정보이므로 담지 않습니다. albums.jsonl의 수록곡 배열 순서가 그 순서입니다.
 - 수록곡의 아티스트는 id가 비어 있으므로 uri(spotify:artist:ID)에서 ID를 읽습니다. 순서는 응답 그대로입니다.
 - album_thumb_url은 앨범 커버 중 가로 64픽셀 이미지의 URL입니다. 목록에서 쓰는 작은 이미지이며,
@@ -57,6 +59,9 @@ def to_track(track: dict, album: dict, thumb_url: str | None) -> dict:
         "play_count": track.get("play_count"),
         "album_id": album["id"],
         "album_thumb_url": thumb_url,
+        "isrc": None,
+        "valence": None,
+        "arousal": None,
     }
 
 

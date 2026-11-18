@@ -62,8 +62,12 @@ python v4/fetch_audio_features.py
 앨범의 수록곡을 곡마다 한 줄로 펼칩니다. 곡을 걸러내지 않으며, 한 줄은 다음 형식입니다.
 
 ```json
-{"id", "title", "artists": [{"id", "name"}], "duration_ms", "play_count", "album_id", "album_thumb_url"}
+{"id", "title", "artists": [{"id", "name"}], "duration_ms", "play_count", "album_id", "album_thumb_url",
+ "isrc", "valence", "arousal"}
 ```
+
+`isrc`, `valence`, `arousal`은 이 단계에서 모두 `null`이며, 이후 단계가 같은 파일의 빈칸을 채웁니다.
+`arousal`은 ReccoBeats의 `energy` 값을 쓰는 항목입니다.
 
 앨범 안의 곡 순서는 담지 않습니다. `albums.jsonl`의 수록곡 배열 순서가 그 순서입니다.
 
