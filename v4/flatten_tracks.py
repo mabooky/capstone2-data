@@ -5,16 +5,16 @@
 - 곡을 걸러내지 않습니다. 앨범의 수록곡을 모두 한 줄씩 옮기며, 중복 제거와 inst/MR 제외는 다음 단계에서 합니다.
 - 곡마다 한 줄을 다음 열로 기록합니다. 열 이름과 순서는 DB의 tracks_v4 테이블과 같습니다.
   spotify_id, title, artist, artist_spotify_ids, duration_ms, play_count, album_id, album_thumb_url,
-  reccobeats_id, isrc, valence, arousal
+  reccobeats_id, valence, arousal
 - artist는 곡의 아티스트 이름을 ', '로 이은 표시용 문자열이고, artist_spotify_ids는 같은 순서의 Spotify ID를
   {id1,id2} 형식(PostgreSQL 배열)으로 적은 것입니다. 수록곡의 아티스트는 id가 비어 있으므로 uri(spotify:artist:ID)에서 ID를 읽습니다.
 - album_thumb_url은 앨범 커버 중 가로 64픽셀 이미지의 URL입니다. 목록에서 쓰는 작은 이미지이며,
   300·640픽셀 이미지는 앨범 테이블에서 돌려줍니다. 64픽셀 이미지가 없으면 빈칸입니다.
 - play_count가 없는 곡은 0으로 적습니다.
-- reccobeats_id, isrc, valence, arousal은 이 단계에서 비워 둡니다. 이후 단계가 같은 파일의 빈칸을 채웁니다.
+- reccobeats_id, valence, arousal은 이 단계에서 비워 둡니다. 이후 단계가 같은 파일의 빈칸을 채웁니다.
 - 앨범 안의 곡 순서(트랙 번호, 디스크)는 곡의 속성이 아니라 앨범의 정보이므로 담지 않습니다. albums.jsonl의 수록곡 배열 순서가 그 순서입니다.
 - 실행할 때마다 출력 파일을 처음부터 새로 만듭니다. 같은 입력이면 항상 같은 결과가 나옵니다.
-- 출력 파일에 이미 채워진 곡(reccobeats_id, isrc, valence, arousal 중 값이 있는 곡)이 있으면, 다시 만들 때 그 값이
+- 출력 파일에 이미 채워진 곡(reccobeats_id, valence, arousal 중 값이 있는 곡)이 있으면, 다시 만들 때 그 값이
   모두 사라지므로 아무것도 하지 않고 중단합니다. 정말 새로 만들려면 --force를 지정합니다.
 """
 
@@ -30,9 +30,9 @@ DEFAULT_OUTPUT = DATA_DIR / "tracks.csv"
 THUMB_WIDTH = 64
 COLUMNS = [
     "spotify_id", "title", "artist", "artist_spotify_ids", "duration_ms", "play_count",
-    "album_id", "album_thumb_url", "reccobeats_id", "isrc", "valence", "arousal",
+    "album_id", "album_thumb_url", "reccobeats_id", "valence", "arousal",
 ]
-FILLED_COLUMNS = ["reccobeats_id", "isrc", "valence", "arousal"]  # 이후 단계가 채우는 열
+FILLED_COLUMNS = ["reccobeats_id", "valence", "arousal"]  # 이후 단계가 채우는 열
 
 
 def parse_args() -> argparse.Namespace:

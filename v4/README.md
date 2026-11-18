@@ -1,6 +1,6 @@
 # 데이터셋 v4
 
-SpotifyScraper로 한국 아티스트의 모든 곡 정보를 수집하고, ReccoBeats와 Spotify Web API로 곡의 ISRC와 오디오 특징을 채워 곡 DB(PostgreSQL)에 올릴 자료를 만드는 파이프라인입니다.
+SpotifyScraper로 한국 아티스트의 모든 곡 정보를 수집하고, ReccoBeats로 곡의 오디오 특징을 채워 곡 DB(PostgreSQL)에 올릴 자료를 만드는 파이프라인입니다.
 수집한 자료는 `data/`에 저장되며, 아래 순서대로 실행해 다시 만들 수도 있습니다.
 
 ## 준비
@@ -13,12 +13,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-일부 스크립트는 저장소 루트의 `.env`(커밋되지 않음)에서 접속 정보를 읽습니다.
-
-| 변수 | 쓰는 스크립트 |
-|---|---|
-| `DATABASE_URL` | `upload_albums.py` |
-| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | `fill_isrc_using_spotify.py` |
+`upload_albums.py`는 저장소 루트의 `.env`(커밋되지 않음)에서 `DATABASE_URL`을 읽어 DB에 접속합니다.
 
 ## 시드 아티스트 목록
 
@@ -43,18 +38,16 @@ python v4/collect_seed_artists.py --yes    # CSV 끝에 덧붙이기
 | 2 | `fetch_albums.py` | `data/discographies.jsonl` | `data/albums.jsonl` |
 | 3 | `flatten_tracks.py` | `data/albums.jsonl` | `data/tracks.csv` |
 | 4 | `fill_using_reccobeats.py` | `data/tracks.csv` | `data/tracks.csv` (ReccoBeats 값을 채움) |
-| 5 | `fill_isrc_using_spotify.py` | `data/tracks.csv` | `data/tracks.csv` (ISRC 빈칸을 채움) |
 
 ```bash
 python v4/fetch_discographies.py
 python v4/fetch_albums.py
 python v4/flatten_tracks.py
 python v4/fill_using_reccobeats.py
-python v4/fill_isrc_using_spotify.py
 ```
 
-> **주의: `flatten_tracks.py`를 다시 실행하면 `data/tracks.csv`를 처음부터 새로 만들어, 4, 5단계에서 채운 내용이 모두 사라집니다.**
-> 특히 5단계는 요청 제한 때문에 며칠이 걸릴 수 있습니다. 앨범을 추가로 받은 뒤처럼 3단계를 다시 실행해야 한다면, 먼저 채워진 `tracks.csv`를 커밋해 두고 4, 5단계를 다시 해야 한다는 점을 감안하십시오.
+> **주의: `flatten_tracks.py`를 다시 실행하면 `data/tracks.csv`를 처음부터 새로 만들어, 4단계에서 채운 내용이 모두 사라집니다.**
+> 앨범을 추가로 받은 뒤처럼 3단계를 다시 실행해야 한다면, 먼저 채워진 `tracks.csv`를 커밋해 두고 4단계를 다시 해야 한다는 점을 감안하십시오.
 > 실수를 막기 위해 `tracks.csv`에 채워진 값이 하나라도 있으면 `flatten_tracks.py`는 아무것도 하지 않고 중단하며, 정말 새로 만들려면 `--force`를 붙여야 합니다.
 
 DB에 올리는 `upload_albums.py`는 이 순서와 별개로, 2단계가 끝난 뒤 언제든 실행할 수 있습니다. ([DB 적재](#db-적재) 참고)
@@ -78,37 +71,29 @@ DB에 올리는 `upload_albums.py`는 이 순서와 별개로, 2단계가 끝난
 앨범의 수록곡을 곡마다 한 줄로 펼쳐 `tracks.csv`로 만듭니다. 곡을 걸러내지 않으며, 열은 DB의 `tracks_v4` 테이블과 같은 이름과 순서입니다.
 
 ```csv
-spotify_id,title,artist,artist_spotify_ids,duration_ms,play_count,album_id,album_thumb_url,reccobeats_id,isrc,valence,arousal
+spotify_id,title,artist,artist_spotify_ids,duration_ms,play_count,album_id,album_thumb_url,reccobeats_id,valence,arousal
 ```
 
 - `artist`는 곡의 아티스트 이름을 ', '로 이은 표시용 문자열이고, `artist_spotify_ids`는 같은 순서의 Spotify ID를 `{id1,id2}` 형식(PostgreSQL 배열)으로 적은 것입니다.
 - 수록곡의 아티스트는 ID가 비어 있어 `uri`(`spotify:artist:ID`)에서 읽습니다.
 - `album_thumb_url`은 앨범 커버 중 가로 64픽셀 이미지의 URL입니다. 300, 640픽셀 이미지는 `albums_v4`에 있습니다.
 - `play_count`가 없는 곡은 0으로 적습니다.
-- `reccobeats_id`, `isrc`, `valence`, `arousal`은 이 단계에서 모두 비어 있으며, 4, 5단계가 같은 파일의 빈칸을 채웁니다.
+- `reccobeats_id`, `valence`, `arousal`은 이 단계에서 모두 비어 있으며, 4단계가 같은 파일의 빈칸을 채웁니다.
 - 앨범 안의 곡 순서는 담지 않습니다. `albums.jsonl`의 수록곡 배열 순서가 그 순서입니다.
 
 실행할 때마다 `tracks.csv`를 처음부터 새로 만들며, 채워진 값이 있으면 `--force` 없이는 중단합니다. (위 주의 참고)
 
 ### 4. ReccoBeats 값 채우기
 
-`tracks.csv`의 곡 중 `reccobeats_id`가 빈 곡의 Spotify ID를 40개씩 묶어 ReccoBeats에 조회하고, 응답에 있는 곡의 `reccobeats_id`, `isrc`, `valence`, `arousal`을 채웁니다.
+`tracks.csv`의 곡 중 `reccobeats_id`가 빈 곡의 Spotify ID를 40개씩 묶어 ReccoBeats에 조회하고, 응답에 있는 곡의 `reccobeats_id`, `valence`, `arousal`을 채웁니다.
 
 - `arousal`은 ReccoBeats의 `energy` 값입니다. `valence`와 `arousal`은 DB 스키마와 같게 ReccoBeats의 0~1 값을 [-1, 1] 범위로 바꾸어 적습니다.
-- 응답의 다른 오디오 특징(`danceability`, `tempo` 등)은 쓰지 않으므로 담지 않습니다.
-- ReccoBeats에 곡은 있지만 `valence`나 `energy`가 없는 곡은 `reccobeats_id`와 `isrc`만 채우고 `valence`, `arousal`은 빈칸으로 둡니다. 응답에 ISRC가 없는 곡은 `isrc`도 빈칸이며, 이 곡은 5단계의 대상이 됩니다.
+- ISRC와 응답의 다른 오디오 특징(`danceability`, `tempo` 등)은 쓰지 않으므로 담지 않습니다.
+- ReccoBeats에 곡은 있지만 `valence`나 `energy`가 없는 곡은 `reccobeats_id`만 채우고 `valence`, `arousal`은 빈칸으로 둡니다.
 - ReccoBeats에 값이 없는 곡은 응답에 나오지 않아 빈칸으로 남고, 다시 실행하면 다시 요청합니다. 요청이 실패한 곡도 빈칸으로 남아 파일만으로는 두 경우를 구분할 수 없습니다.
   따라서 실행이 끝날 때 출력되는 **실패 수가 0이 될 때까지** 다시 실행한 뒤 다음 단계로 넘어갑니다.
 - 2026-11-19 기준으로 70,339곡 중 53,106곡이 채워졌고(그 중 38곡은 `valence`, `arousal`이 빈칸), 17,233곡은 ReccoBeats에 없습니다.
-
-### 5. Spotify로 ISRC 채우기
-
-`tracks.csv`에서 `isrc`가 빈 곡의 ISRC를 Spotify Web API(`GET /v1/tracks/{id}`)로 조회해 채웁니다. 이미 값이 있는 곡(4단계에서 채워진 곡)은 건너뜁니다.
-ISRC만 얻을 수 있으며 `valence`와 `arousal`은 얻지 못합니다.
-여러 곡을 한 번에 조회하는 엔드포인트는 쓸 수 없어 요청이 곡 수만큼 필요하며, 한 건씩 차례로 보냅니다.
-요청 제한이 엄격해서 한 번에 수백 곡 정도를 처리한 뒤 429(`QUOTA_EXCEEDED`)로 막힐 수 있고, 이때 `Retry-After`가 약 22시간(79,000초)으로 오는 것이 관찰되었습니다. (2026-11-19)
-`Retry-After`가 300초를 넘으면 기다리지 않고 저장한 뒤 멈추며 언제 다시 실행하면 되는지 알려 주므로, 그 시간이 지난 뒤 다시 실행하면 빈 곡부터 이어서 진행합니다.
-ISRC가 없거나 곡이 없는 곡, 요청이 실패한 곡은 빈칸으로 남아 다시 실행할 때 재시도합니다.
+- ISRC는 수집하지 않습니다. 같은 ISRC에 서로 다른 곡이 섞여 있고, ReccoBeats에 값이 없는 곡의 `valence`, `arousal`을 다른 곡에서 복사하는 데에도 도움이 되지 않았기 때문입니다. (2026-11-19 확인)
 
 ## DB 적재
 
@@ -126,14 +111,14 @@ python v4/upload_albums.py --yes    # 실제로 올리기
 ## 수집 스크립트의 공통 동작
 
 - 1, 2단계는 결과를 JSONL에 한 줄씩 기록합니다. 이미 기록된 항목은 다시 조회하지 않으므로, 중간에 멈춰도 같은 명령을 다시 실행하면 이어서 진행합니다.
-- 4, 5단계는 `tracks.csv`의 빈칸을 채우며, 채운 값이 일정 개수 쌓일 때마다 그리고 종료할 때 파일을 저장합니다. 임시 파일에 쓴 뒤 교체하므로 도중에 멈춰도 파일이 깨지지 않으며, 다시 실행하면 빈칸인 곡부터 이어서 진행합니다. 실행하는 동안에는 `tracks.csv`를 다른 곳에서 수정하지 않아야 합니다.
+- 4단계는 `tracks.csv`의 빈칸을 채우며, 채운 값이 일정 개수 쌓일 때마다 그리고 종료할 때 파일을 저장합니다. 임시 파일에 쓴 뒤 교체하므로 도중에 멈춰도 파일이 깨지지 않으며, 다시 실행하면 빈칸인 곡부터 이어서 진행합니다. 실행하는 동안에는 `tracks.csv`를 다른 곳에서 수정하지 않아야 합니다.
 - Ctrl+C를 한 번 누르면 진행 중인 요청만 마치고 저장한 뒤 멈추며, 한 번 더 누르면 즉시 종료합니다.
 - 조회에 실패한 항목은 기록하지 않거나 빈칸으로 남기며 다시 실행할 때 재시도합니다.
-- 요청이 제한되면 쉬었다가 다시 시도하며, 5단계는 `Retry-After`가 길면 기다리지 않고 멈춥니다. 요청 속도는 1, 2, 4단계에서 `--concurrency`(기본값 3)로 조절하며, 5단계는 한 건씩 차례로 보내므로 이 옵션이 없습니다.
+- 요청이 제한되면 쉬었다가 다시 시도합니다. 요청 속도는 1, 2, 4단계에서 `--concurrency`(기본값 3)로 조절합니다.
 - `--limit 개수`로 이번 실행에서 조회할 양을 제한할 수 있어 소량으로 먼저 시험해 볼 수 있습니다.
 
 ## 다른 파일
 
 - `seed-artists.csv`, `collect_seed_artists.py`: 시드 아티스트 목록과 그 목록을 늘리는 스크립트입니다.
-- `db.py`: `.env`를 읽고 DB에 접속하는 공통 모듈입니다. `upload_albums.py`와 `fill_isrc_using_spotify.py`가 씁니다.
+- `db.py`: `.env`를 읽고 DB에 접속하는 공통 모듈입니다. `upload_albums.py`가 씁니다.
 - `schema.sql`: DB 테이블(`albums_v4`, `tracks_v4`)의 형식을 보여 주는 파일이며 실행용이 아닙니다. 실제로 테이블을 만드는 문장은 `upload_albums.py`에 있고, `tracks_v4`는 아직 DB에 만들지 않았습니다.

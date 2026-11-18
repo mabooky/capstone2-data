@@ -3,12 +3,12 @@
     python v4/fill_using_reccobeats.py [--file 파일] [--concurrency 3] [--batch-size 40] [--limit 개수]
 
 - reccobeats_id가 빈 곡의 Spotify ID를 batch-size개씩 묶어 ReccoBeats의 GET /v1/audio-features에 요청합니다.
-- 응답에 있는 곡은 reccobeats_id, isrc, valence, arousal을 채웁니다. 곡은 응답의 href(Spotify 곡 링크)에서 읽은 ID로 찾습니다.
-  - reccobeats_id는 응답의 id이고, isrc는 응답 그대로입니다. ISRC가 없으면 빈칸으로 둡니다.
+- 응답에 있는 곡은 reccobeats_id, valence, arousal을 채웁니다. 곡은 응답의 href(Spotify 곡 링크)에서 읽은 ID로 찾습니다.
+  - reccobeats_id는 응답의 id입니다.
   - arousal은 응답의 energy입니다. valence와 arousal은 DB와 같게 응답의 0~1 값을 값 × 2 - 1로 바꾸어
     [-1, 1] 범위로 적으며, 소수 6자리로 반올림합니다. (응답이 최대 6자리라 값이 손실되지 않습니다.)
-  - 곡은 있지만 valence나 energy가 없는 곡은 reccobeats_id와 isrc만 채우고 valence, arousal은 빈칸으로 둡니다.
-- 그 밖의 오디오 특징(danceability, tempo 등)은 쓰지 않으므로 담지 않습니다. 이 파일의 다른 열은 바꾸지 않습니다.
+  - 곡은 있지만 valence나 energy가 없는 곡은 reccobeats_id만 채우고 valence, arousal은 빈칸으로 둡니다.
+- ISRC와 그 밖의 오디오 특징(danceability, tempo 등)은 쓰지 않으므로 담지 않습니다. 이 파일의 다른 열은 바꾸지 않습니다.
 - ReccoBeats에 값이 없는 곡은 응답에 나오지 않아 빈칸으로 남고, 다시 실행하면 다시 요청합니다.
   요청이 실패한 곡도 빈칸으로 남으므로, 파일만 보면 "값이 없는 곡"과 "실패한 곡"을 구분할 수 없습니다.
   따라서 실행이 끝날 때 출력되는 실패 수가 0이 될 때까지 다시 실행해야 합니다.
@@ -36,7 +36,7 @@ DEFAULT_FILE = Path(__file__).resolve().parent / "data" / "tracks.csv"
 API_URL = "https://api.reccobeats.com/v1/audio-features"
 HEADER = [
     "spotify_id", "title", "artist", "artist_spotify_ids", "duration_ms", "play_count",
-    "album_id", "album_thumb_url", "reccobeats_id", "isrc", "valence", "arousal",
+    "album_id", "album_thumb_url", "reccobeats_id", "valence", "arousal",
 ]
 MIN_INTERVAL_SEC = 0.12  # 요청 사이의 최소 간격(초당 약 8회)
 REQUEST_TIMEOUT_SEC = 60
@@ -121,7 +121,6 @@ def to_values(item: dict) -> tuple[str, dict[str, str]]:
     has_features = isinstance(valence, (int, float)) and isinstance(energy, (int, float))
     return spotify_id, {
         "reccobeats_id": item["id"],
-        "isrc": item.get("isrc") or "",
         "valence": to_cell(valence) if has_features else "",
         "arousal": to_cell(energy) if has_features else "",
     }
@@ -223,7 +222,7 @@ async def fill_all(args: argparse.Namespace, rows: list[dict], pending: list[str
 
     state = "중단되었습니다" if stop.is_set() else "끝났습니다"
     print(
-        f"\n{state}. 성공 {stats['ok']:,}곡(그 중 valence와 energy가 없어 ISRC만 채운 곡 {stats['no_features']:,}곡), "
+        f"\n{state}. 성공 {stats['ok']:,}곡(그 중 valence와 energy가 없어 reccobeats_id만 채운 곡 {stats['no_features']:,}곡), "
         f"없음 {stats['missing']:,}곡, 실패 {stats['failed']:,}곡"
     )
     print("없음과 실패는 빈칸으로 남아 다시 실행하면 재요청합니다. 실패가 0이 될 때까지 다시 실행하세요.")
