@@ -92,7 +92,7 @@
 
   /* 목록 */
   .row {
-    display: grid; grid-template-columns: 44px minmax(0, 1.6fr) minmax(0, 1fr) 44px 96px;
+    display: grid; grid-template-columns: 44px minmax(0, 1.6fr) minmax(0, 1fr) 44px 64px;
     column-gap: 10px; align-items: center;
     padding: 7px 12px; border-top: 1px solid var(--line);
     cursor: grab;
@@ -102,7 +102,7 @@
   .row.missing { background: var(--bad-bg); color: var(--bad-ink); }
   .row.drop-ok { outline: 2px solid var(--accent); outline-offset: -2px; }
   .row.dragging { opacity: .45; }
-  .row.ref { background: var(--ok-bg); }
+  .group.ref { outline: 2px solid var(--accent); outline-offset: -2px; }
   .icon.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
   .ref-bar { display: flex; align-items: center; gap: 8px; background: var(--ok-bg); color: var(--ok-ink); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; }
   .ref-bar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -194,7 +194,6 @@
         <select id="sort" aria-label="정렬">
           <option value="file">파일 순서</option>
           <option value="size">곡 많은 순</option>
-          <option value="sim" disabled>기준 곡과 제목이 비슷한 순</option>
         </select>
         <label class="check"><input type="checkbox" id="onlyWarn"> 점검이 필요한 묶음만</label>
       </div>
@@ -556,7 +555,8 @@ async function commit(compute) {
     await saveGroups(next);
     state.groups = next;
     rebuild();
-    if (state.ref && state.where.has(state.ref)) dropRef();  // 기준 곡이 묶음에 들어가면 기준을 풉니다.
+    if (state.ref && !computeScores()) dropRef();  // 기준 묶음이 없어졌으면 기준을 풉니다.
+    showRefBar();
     refreshGroups(true);
     refreshLoose(true);
     showStats();
@@ -741,35 +741,40 @@ function similarity(a, b) {
   return (2 * common) / (a.size + b.size);
 }
 
-function setRef(id) {
-  const ref = state.tracks.get(id);
-  if (!ref) return;
-  const grams = titleGrams(ref);
+// 기준 묶음을 정하면, 묶이지 않은 곡마다 묶음 안 곡들과의 제목 유사도 중 가장 높은 값을 점수로 씁니다.
+function computeScores() {
+  const group = state.groups.find((g) => g.id === state.ref);
+  if (!group) return false;
+  const refs = group.members.filter((m) => m.track).map((m) => titleGrams(m.track));
   const scores = new Map();
-  for (const track of state.trackList) if (hasVa(track)) scores.set(track.id, track.id === id ? 1 : similarity(grams, titleGrams(track)));
-  state.ref = id;
+  for (const track of state.loose) scores.set(track.id, Math.max(0, ...refs.map((grams) => similarity(grams, titleGrams(track)))));
   state.scores = scores;
-  $("sort").querySelector('option[value="sim"]').disabled = false;
-  $("sort").value = "sim";
-  showRefBar();
-  refreshGroups();
-  refreshLoose();
+  return true;
 }
 
-// 기준 곡을 풀고 화면 정렬을 원래대로 돌립니다. 화면을 다시 그릴지는 호출한 쪽이 정합니다.
+function setRef(groupId) {
+  state.ref = groupId;
+  if (!computeScores()) { dropRef(); return; }
+  showRefBar();
+  refreshGroups(true);
+  refreshLoose();
+  $("bodyL").scrollTop = 0;
+}
+
+// 기준 묶음을 풀고 오른쪽 정렬을 원래대로 돌립니다. 화면을 다시 그릴지는 호출한 쪽이 정합니다.
 function dropRef() {
   state.ref = null;
   state.scores = null;
-  const option = $("sort").querySelector('option[value="sim"]');
-  option.disabled = true;
-  if ($("sort").value === "sim") $("sort").value = "file";
   showRefBar();
 }
 
 function showRefBar() {
-  const ref = state.ref && state.tracks.get(state.ref);
-  $("refBar").hidden = !ref;
-  if (ref) $("refText").textContent = `기준 곡: ${ref.title} — ${ref.artist} · 제목이 비슷한 순으로 정렬 중`;
+  const group = state.ref && state.groups.find((g) => g.id === state.ref);
+  $("refBar").hidden = !group;
+  if (group) {
+    const first = group.members.find((m) => m.track);
+    $("refText").textContent = `기준 묶음 #${group.no}${first ? `: ${first.track.title} — ${first.track.artist}` : ""} · 묶이지 않은 곡을 제목이 비슷한 순으로 정렬 중`;
+  }
 }
 
 const scoreOf = (id) => (state.scores ? state.scores.get(id) ?? 0 : null);
@@ -780,9 +785,7 @@ function refreshGroups(keep = false) {
   const words = terms("qG");
   const onlyWarn = $("onlyWarn").checked;
   let view = all.filter((g) => (!onlyWarn || g.needsCheck) && words.every((t) => groupHaystack(g).includes(t)));
-  for (const g of all) g.score = state.scores ? Math.max(0, ...g.members.map((m) => scoreOf(m.id))) : null;
   if ($("sort").value === "size") view = view.slice().sort((a, b) => b.members.length - a.members.length || a.no - b.no);
-  else if ($("sort").value === "sim" && state.scores) view = view.slice().sort((a, b) => b.score - a.score || a.no - b.no);
   const songs = view.reduce((sum, g) => sum + g.members.length, 0);
   $("summaryG").textContent = `${fmt(view.length)}개 (전체 ${fmt(all.length)}개) · 곡 ${fmt(songs)}개`;
   groupList.reset(view, keep);
@@ -794,7 +797,7 @@ function refreshGroups(keep = false) {
 function refreshLoose(keep = false) {
   const words = terms("qL");
   let view = state.loose.filter((t) => words.every((w) => trackHaystack(t).includes(w)));
-  if (state.scores) view = view.slice().sort((a, b) => (b.id === state.ref) - (a.id === state.ref) || scoreOf(b.id) - scoreOf(a.id) || a.order - b.order);
+  if (state.scores) view = view.slice().sort((a, b) => scoreOf(b.id) - scoreOf(a.id) || a.order - b.order);
   $("summaryL").textContent = `${fmt(view.length)}곡 (전체 ${fmt(state.loose.length)}곡)`;
   looseList.reset(view, keep);
   if (!view.length) {
@@ -814,11 +817,12 @@ function groupCard(g) {
     g.durMin != null
       ? el("span", { class: "chip", text: durationText(g.durMin) !== durationText(g.durMax) ? `길이 ${durationText(g.durMin)}~${durationText(g.durMax)}` : `길이 ${durationText(g.durMin)}` })
       : null,
-    g.score != null ? el("span", { class: "chip ok", text: `제목 유사도 ${percent(g.score)}` }) : null,
     g.problems.map((problem) => el("span", { class: "chip bad", text: problem })),
     !g.needsCheck ? el("span", { class: "chip ok", text: "이상 없음" }) : null,
+    el("span", { style: "flex:1" }),
+    el("button", { class: `icon${g.id === state.ref ? " on" : ""}`, type: "button", title: g.id === state.ref ? "기준 묶음입니다" : "이 묶음을 기준으로 묶이지 않은 곡을 제목이 비슷한 순으로 정렬", onclick: () => setRef(g.id) }, "◎"),
   );
-  const card = el("article", { class: "group" }, head, g.members.map((m) => trackRow(m, g.id)));
+  const card = el("article", { class: `group${g.id === state.ref ? " ref" : ""}` }, head, g.members.map((m) => trackRow(m, g.id)));
   card.addEventListener("dragover", (e) => {
     if (!state.drag || state.drag.from === g.id) return;
     e.preventDefault();
@@ -838,10 +842,6 @@ function trackRow(member, groupId = null) {
   const { id, track, album, flags } = member;
   const link = el("a", { class: "icon", href: `https://open.spotify.com/track/${id}`, target: "_blank", rel: "noopener", title: "Spotify에서 열기", draggable: "false" }, "▶");
   const copy = el("button", { class: "icon", type: "button", title: "곡 ID 복사", onclick: () => copyText(id, "곡 ID") }, "⧉");
-  const isRef = groupId == null && state.ref === id;
-  const refButton = groupId == null && track && hasVa(track)
-    ? el("button", { class: `icon${isRef ? " on" : ""}`, type: "button", title: isRef ? "이미 기준으로 삼은 곡입니다" : "이 곡을 기준으로 제목이 비슷한 순으로 정렬", onclick: () => setRef(id) }, "◎")
-    : null;
   let row;
   if (!track) {
     row = el("div", { class: "row missing" },
@@ -859,7 +859,7 @@ function trackRow(member, groupId = null) {
     const albumSub = album ? [album.type, album.year].filter(Boolean).join(" · ") : track.albumId;
     const score = groupId == null ? scoreOf(id) : null;
     const meta = [
-      score != null ? el("span", { class: "score", text: isRef ? "기준 곡" : `제목 유사도 ${percent(score)}` }) : null,
+      score != null ? el("span", { class: "score", text: `제목 유사도 ${percent(score)}` }) : null,
       track.playCount != null ? `재생 ${fmt(track.playCount)}` : null,
       hasVa(track) ? el("span", {}, el("b", { text: "V " }), sign(track.valence), " ", el("b", { text: "A " }), sign(track.arousal)) : "V/A 없음",
     ].filter(Boolean);
@@ -873,12 +873,11 @@ function trackRow(member, groupId = null) {
         metaLine),
       el("div", { class: "album", title: `${albumName} (${albumSub})` }, albumName, el("small", { text: albumSub })),
       el("span", { class: "num", title: `${(track.durationMs / 1000).toFixed(1)}초`, text: durationText(track.durationMs) }),
-      el("div", { class: "act" }, refButton, link, copy),
+      el("div", { class: "act" }, link, copy),
       flags.length ? el("div", { class: "flags" }, flags.map((f) => el("span", { class: "chip bad", text: f }))) : null,
     );
   }
 
-  if (isRef) row.classList.add("ref");
   row.draggable = true;
   row.addEventListener("dragstart", (e) => {
     state.drag = { id, from: groupId };
@@ -988,7 +987,7 @@ $("qG").addEventListener("input", () => { clearTimeout(timerG); timerG = setTime
 $("qL").addEventListener("input", () => { clearTimeout(timerL); timerL = setTimeout(() => refreshLoose(), 150); });
 $("sort").addEventListener("change", () => refreshGroups());
 $("onlyWarn").addEventListener("change", () => refreshGroups());
-$("refClear").addEventListener("click", () => { dropRef(); refreshGroups(); refreshLoose(); });
+$("refClear").addEventListener("click", () => { dropRef(); refreshGroups(true); refreshLoose(); });
 $("reload").addEventListener("click", () => start());
 $("change").addEventListener("click", async () => showGate("", await storedHandle()));
 
