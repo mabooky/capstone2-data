@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS albums_v4 (
     cover_url_64 text
 );
 
--- 곡. 서비스에서 추천하고 재생하는 단위입니다. valence, energy는 ReccoBeats 값 그대로(0~1)입니다.
+-- 곡. 서비스에서 추천하고 재생하는 단위입니다. valence, arousal은 [-1, 1] 범위로 정규화된 값입니다.
 CREATE TABLE IF NOT EXISTS tracks_v4 (
     spotify_id text PRIMARY KEY CHECK (spotify_id ~ '^[0-9A-Za-z]{22}$'),
     reccobeats_id uuid, -- 오디오를 올려서 값을 얻은 곡은 없을 수 있음
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS tracks_v4 (
     play_count bigint NOT NULL DEFAULT 0 CHECK (play_count >= 0), -- Spotify 누적 재생 수. 값이 없는 곡은 0
     album_id text NOT NULL REFERENCES albums_v4 (spotify_id),
     album_thumb_url text, -- 목록 화면용 64픽셀 앨범 커버. 앨범 테이블을 조인하지 않으려고 곡에 둠
-    valence double precision NOT NULL CHECK (valence BETWEEN 0 AND 1),
-    energy double precision NOT NULL CHECK (energy BETWEEN 0 AND 1)
+    valence double precision NOT NULL CHECK (valence BETWEEN -1 AND 1),
+    arousal double precision NOT NULL CHECK (arousal BETWEEN -1 AND 1)
 );
 
 CREATE INDEX IF NOT EXISTS tracks_v4_artist_spotify_ids_idx ON tracks_v4 USING gin (artist_spotify_ids);
