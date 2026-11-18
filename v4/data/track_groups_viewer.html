@@ -457,13 +457,16 @@ function analyze(groups, tracks, albums) {
       const flags = [];
       if (!ID_RE.test(id)) flags.push("곡 ID 형식 오류");
       else if (!track) flags.push("tracks.csv에 없음");
+      else if (track.valence == null || track.arousal == null) flags.push("(V, A)가 없는 곡");  // 묶음에는 (V, A)가 있는 곡만 넣습니다.
       const others = (where.get(id) || []).filter((no) => no !== g.no);
       if (others.length) flags.push(`#${others.join(", #")} 묶음에도 있음`);
       return { id, track, album: track ? albums.get(track.albumId) || null : null, flags };
     });
     const missing = g.members.filter((m) => m.flags.some((f) => f.startsWith("곡 ID") || f.startsWith("tracks.csv"))).length;
     const overlap = g.members.filter((m) => m.flags.some((f) => f.includes("묶음에도"))).length;
+    const noVa = g.members.filter((m) => m.flags.includes("(V, A)가 없는 곡")).length;
     if (missing) g.problems.push(`찾을 수 없는 곡 ${missing}개`);
+    if (noVa) g.problems.push(`(V, A)가 없는 곡 ${noVa}개`);
     if (overlap) g.problems.push(`다른 묶음과 겹치는 곡 ${overlap}개`);
 
     const found = g.members.filter((m) => m.track).map((m) => m.track);
