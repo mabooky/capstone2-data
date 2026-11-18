@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>곡 묶음 뷰어</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --text: #1a1d21;
+    --muted: #697381;
+    --line: #e3e6ea;
+    --hover: #f3f5f7;
+    --accent: #138a43;
+    --chip: #eef1f4;
+    --warn-bg: #fff1cc;
+    --warn-ink: #7a5200;
+    --bad-bg: #fde3e3;
+    --bad-ink: #a02222;
+    --ok-bg: #dff5e6;
+    --ok-ink: #11602f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101215;
+      --panel: #1a1d22;
+      --text: #e7eaee;
+      --muted: #98a1ad;
+      --line: #2a2f36;
+      --hover: #22262c;
+      --accent: #4ade80;
+      --chip: #262b32;
+      --warn-bg: #3b2f10;
+      --warn-ink: #f3cb6b;
+      --bad-bg: #3f1c1c;
+      --bad-ink: #ff9c9c;
+      --ok-bg: #16331f;
+      --ok-ink: #86e2a6;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  }
+  button { font: inherit; color: inherit; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+
+  /* 상단 도구 모음 */
+  .top {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .top .wrap { padding-top: 12px; padding-bottom: 12px; display: grid; gap: 10px; }
+  .title-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 18px; margin: 0; }
+  .stats { color: var(--muted); font-size: 12.5px; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .tools input[type="search"], .tools select {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 10px; font: inherit;
+  }
+  .tools input[type="search"] { flex: 1 1 260px; min-width: 180px; }
+  .btn {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 12px; cursor: pointer;
+  }
+  .btn:hover { background: var(--hover); }
+  .check { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); cursor: pointer; user-select: none; }
+  .summary { color: var(--muted); font-size: 12.5px; }
+
+  /* 목록 */
+  main { padding: 16px 0 80px; }
+  .cols, .row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 2.1fr) minmax(0, 1.4fr) 52px 86px 158px 64px;
+    column-gap: 12px; align-items: center;
+  }
+  .cols {
+    padding: 0 15px 6px; color: var(--muted); font-size: 12px;
+    text-transform: none;
+  }
+  .cols .num, .row .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .group {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    margin-bottom: 14px; overflow: hidden;
+  }
+  .g-head {
+    display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  .g-no { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .uuid {
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--chip); border: 0; border-radius: 6px; padding: 2px 7px; cursor: pointer;
+  }
+  .uuid:hover { outline: 1px solid var(--line); }
+  .chip {
+    display: inline-block; background: var(--chip); color: var(--muted);
+    border-radius: 999px; padding: 1px 9px; font-size: 12px; white-space: nowrap;
+  }
+  .chip.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .chip.bad { background: var(--bad-bg); color: var(--bad-ink); }
+  .chip.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .row { padding: 8px 14px; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row:hover { background: var(--hover); }
+  .row.missing { background: var(--bad-bg); color: var(--bad-ink); }
+  .thumb {
+    width: 52px; height: 52px; border-radius: 6px; object-fit: cover;
+    background: var(--chip); display: block;
+  }
+  .thumb.broken { visibility: hidden; }
+  .main { min-width: 0; }
+  .t-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-sub { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .album { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 13px; }
+  .album small { display: block; font-size: 11.5px; opacity: .85; }
+  .va { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); white-space: nowrap; }
+  .va b { color: var(--text); font-weight: 600; }
+  .act { display: flex; gap: 4px; justify-content: flex-end; }
+  .icon {
+    border: 1px solid var(--line); background: var(--panel); border-radius: 6px;
+    width: 28px; height: 28px; display: inline-grid; place-items: center;
+    cursor: pointer; text-decoration: none; font-size: 13px;
+  }
+  .icon:hover { background: var(--hover); }
+  .flags { grid-column: 2 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+  .meta-m { display: none; }
+
+  .empty, .panel {
+    background: var(--panel); border: 1px dashed var(--line); border-radius: 12px;
+    padding: 28px 20px; text-align: center; color: var(--muted);
+  }
+  .panel { text-align: left; border-style: solid; color: var(--text); }
+  .panel h2 { margin: 0 0 8px; font-size: 16px; }
+  .panel code, .empty code {
+    background: var(--chip); padding: 1px 6px; border-radius: 5px;
+    font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .drop {
+    margin-top: 12px; border: 2px dashed var(--line); border-radius: 10px;
+    padding: 22px; text-align: center; color: var(--muted);
+  }
+  .drop.over { border-color: var(--accent); color: var(--text); }
+  .slots { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .err { color: var(--bad-ink); margin-top: 8px; }
+  #sentinel { height: 1px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 8px;
+    opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 20;
+  }
+  .toast.show { opacity: .95; }
+
+  @media (max-width: 860px) {
+    .top { position: static; }  /* 좁은 화면에서는 도구 모음이 화면을 너무 많이 차지하므로 고정하지 않습니다. */
+    .cols { display: none; }
+    .row { grid-template-columns: 52px minmax(0, 1fr) auto; row-gap: 4px; }
+    .row .album, .row .dur, .row .plays, .row .va { display: none; }
+    .meta-m { display: flex; grid-column: 2 / -1; gap: 4px 10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+    .row .act { grid-column: 3; grid-row: 1; }
+    .flags { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="title-line">
+      <h1>곡 묶음 뷰어</h1>
+      <span class="stats" id="stats">불러오는 중…</span>
+    </div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="제목, 아티스트, 앨범, 곡 ID, 묶음 ID로 찾기" aria-label="검색">
+      <select id="sort" aria-label="정렬">
+        <option value="file">파일 순서</option>
+        <option value="size">곡 많은 순</option>
+        <option value="va">V/A 거리 큰 순</option>
+        <option value="dur">길이 차이 큰 순</option>
+      </select>
+      <label class="check"><input type="checkbox" id="onlyWarn"> 점검이 필요한 묶음만</label>
+      <button class="btn" id="reload" type="button">다시 불러오기</button>
+    </div>
+    <div class="summary" id="summary"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="panel"></div>
+  <div class="cols" id="cols" hidden>
+    <span></span><span>제목</span><span>앨범</span><span class="num">길이</span><span class="num">재생 수</span><span>V · A</span><span></span>
+  </div>
+  <div id="list"></div>
+  <div id="sentinel"></div>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+
+// ---- 설정 -------------------------------------------------------------------
+const FILES = { groups: "track_groups.csv", tracks: "tracks.csv", albums: "albums.jsonl" };
+const PAGE_SIZE = 30;               // 스크롤할 때마다 새로 그리는 묶음 수
+const SCROLL_MARGIN = 800;          // 화면 아래 이만큼(px) 안에 끝이 보이면 다음 묶음을 그립니다.
+const WARN_DURATION_SEC = 3;        // 묶음 안 길이 차이가 이보다 크면 표시합니다.
+const WARN_VA_DISTANCE = 0.3;       // 묶음 안 V/A 최대 거리가 이보다 크면 표시합니다.
+const ID_RE = /^[0-9A-Za-z]{22}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ALBUM_TYPES = { album: "앨범", single: "싱글", ep: "EP", compilation: "컴필레이션" };
+
+// ---- 작은 도우미 ----------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Number(n).toLocaleString("ko-KR");
+
+function el(tag, props = {}, ...kids) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (value == null || value === false) continue;
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? "" : value);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) node.append(kid);
+  return node;
+}
+
+function toast(message) {
+  const node = $("toast");
+  node.textContent = message;
+  node.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => node.classList.remove("show"), 1400);
+}
+
+async function copyText(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = el("textarea", { style: "position:fixed;opacity:0" });
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  toast(`${label}을(를) 복사했습니다.`);
+}
+
+function durationText(ms) {
+  const seconds = Math.round(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+// ---- 파일 읽기 ------------------------------------------------------------------
+async function readLines(stream, onLine) {
+  const reader = stream.getReader();
+  let rest = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    rest += value;
+    let from = 0, index;
+    while ((index = rest.indexOf("\n", from)) !== -1) {
+      onLine(rest.slice(from, index));
+      from = index + 1;
+    }
+    rest = rest.slice(from);
+  }
+  if (rest) onLine(rest);
+}
+
+function urlSource(name) {
+  const url = () => `${name}?t=${Date.now()}`;  // 캐시 대신 항상 새 파일을 받습니다.
+  const open = async () => {
+    const response = await fetch(url(), { cache: "no-store" });
+    if (!response.ok) throw new Error(`${name}을(를) 읽지 못했습니다. (HTTP ${response.status})`);
+    return response;
+  };
+  return {
+    name,
+    text: async () => (await open()).text(),
+    lines: async (onLine) => readLines((await open()).body.pipeThrough(new TextDecoderStream()), onLine),
+  };
+}
+
+function fileSource(file) {
+  return {
+    name: file.name,
+    text: () => file.text(),
+    lines: (onLine) => readLines(file.stream().pipeThrough(new TextDecoderStream()), onLine),
+  };
+}
+
+// CSV를 행 목록으로 바꿉니다. 따옴표 안의 쉼표, 줄바꿈, 겹따옴표를 처리합니다.
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let i = text.charCodeAt(0) === 0xfeff ? 1 : 0;
+  const n = text.length;
+  const plain = /[^,"\r\n]*/y;
+  while (i < n) {
+    let field;
+    if (text[i] === '"') {
+      i++;
+      field = "";
+      for (;;) {
+        const j = text.indexOf('"', i);
+        if (j === -1) { field += text.slice(i); i = n; break; }
+        field += text.slice(i, j);
+        if (text[j + 1] === '"') { field += '"'; i = j + 2; }
+        else { i = j + 1; break; }
+      }
+    } else {
+      plain.lastIndex = i;
+      plain.test(text);
+      field = text.slice(i, plain.lastIndex);
+      i = plain.lastIndex;
+    }
+    row.push(field);
+    const c = text[i];
+    if (c === ",") { i++; if (i >= n) row.push(""); continue; }
+    if (c === "\r" || c === "\n" || c === undefined) {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      i++;
+      rows.push(row);
+      row = [];
+    }
+  }
+  if (row.length) rows.push(row);
+  return rows.filter((r) => !(r.length === 1 && r[0] === ""));
+}
+
+// "{id1,id2}" 형식(PostgreSQL 배열)을 목록으로 바꿉니다.
+function parseArray(text) {
+  let value = text.trim();
+  if (value.startsWith("{") && value.endsWith("}")) value = value.slice(1, -1);
+  return value.split(",").map((x) => x.trim().replace(/^"|"$/g, "")).filter(Boolean);
+}
+
+// ---- 데이터 불러오기와 분석 --------------------------------------------------------
+async function loadData(sources, setStatus) {
+  const started = performance.now();
+
+  setStatus(`${FILES.groups} 읽는 중…`);
+  const groupRows = parseCsv(await sources.groups.text());
+  const header = groupRows[0] || [];
+  if (header[0] !== "group_id" || header[1] !== "spotify_ids") {
+    throw new Error(`${FILES.groups}의 머리글이 group_id,spotify_ids가 아닙니다.`);
+  }
+  const groups = groupRows.slice(1).map((r, index) => ({
+    no: index + 1,
+    id: (r[0] || "").trim(),
+    ids: parseArray(r[1] || ""),
+  }));
+  const needed = new Set(groups.flatMap((g) => g.ids));
+
+  setStatus(`${FILES.tracks} 읽는 중…`);
+  const trackRows = parseCsv(await sources.tracks.text());
+  const col = Object.fromEntries((trackRows[0] || []).map((name, i) => [name, i]));
+  for (const name of ["spotify_id", "title", "artist", "duration_ms", "album_id"]) {
+    if (!(name in col)) throw new Error(`${FILES.tracks}에 ${name} 열이 없습니다.`);
+  }
+  const tracks = new Map();
+  const albumIds = new Set();
+  for (let i = 1; i < trackRows.length; i++) {
+    const r = trackRows[i];
+    const id = r[col.spotify_id];
+    if (!needed.has(id)) continue;
+    const num = (name) => (r[col[name]] === "" || r[col[name]] == null ? null : Number(r[col[name]]));
+    tracks.set(id, {
+      id,
+      title: r[col.title],
+      artist: r[col.artist],
+      durationMs: num("duration_ms"),
+      playCount: num("play_count"),
+      albumId: r[col.album_id],
+      thumb: r[col.album_thumb_url] || "",
+      valence: num("valence"),
+      arousal: num("arousal"),
+    });
+    albumIds.add(r[col.album_id]);
+  }
+
+  const albums = new Map();
+  let albumsRead = 0;
+  let hasAlbums = Boolean(sources.albums);
+  if (sources.albums && albumIds.size) {
+    setStatus(`${FILES.albums} 읽는 중…`);
+    const head = /^\{"album_id":\s*"([0-9A-Za-z]{22})"/;
+    try {
+      await sources.albums.lines((line) => {
+        albumsRead++;
+        const m = head.exec(line);
+        if (!m || !albumIds.has(m[1])) return;  // 필요한 앨범만 해석합니다.
+        try {
+          const album = JSON.parse(line).album;
+          albums.set(m[1], {
+            name: album.name,
+            type: ALBUM_TYPES[album.album_type] || album.album_type || "",
+            year: (album.release_date || "").slice(0, 4),
+          });
+        } catch { /* 깨진 줄은 건너뜁니다. */ }
+      });
+    } catch {
+      hasAlbums = false;  // 앨범 파일을 읽지 못해도 앨범명만 생략하고 계속 보여 줍니다.
+    }
+  }
+
+  analyze(groups, tracks, albums);
+  return {
+    groups,
+    tracks,
+    albums,
+    totalTracks: trackRows.length - 1,
+    hasAlbums,
+    albumsRead,
+    seconds: (performance.now() - started) / 1000,
+  };
+}
+
+function distance(a, b) {
+  return Math.hypot(a.valence - b.valence, a.arousal - b.arousal);
+}
+
+function analyze(groups, tracks, albums) {
+  const where = new Map();    // 곡 ID -> 그 곡이 들어 있는 묶음 번호들
+  const idCount = new Map();  // group_id -> 등장 횟수
+  for (const g of groups) {
+    idCount.set(g.id, (idCount.get(g.id) || 0) + 1);
+    for (const id of new Set(g.ids)) {
+      if (!where.has(id)) where.set(id, []);
+      where.get(id).push(g.no);
+    }
+  }
+  for (const g of groups) {
+    g.problems = [];
+    g.notes = [];
+    if (!g.id) g.problems.push("group_id가 비어 있음");
+    else if (!UUID_RE.test(g.id)) g.problems.push("group_id가 UUID 형식이 아님");
+    if (g.id && idCount.get(g.id) > 1) g.problems.push("group_id가 다른 행과 중복");
+    if (g.ids.length < 2) g.problems.push("곡이 1개 이하");
+    const unique = [...new Set(g.ids)];
+    if (unique.length !== g.ids.length) g.problems.push("같은 곡이 묶음 안에서 반복");
+
+    g.members = unique.map((id) => {
+      const track = tracks.get(id) || null;
+      const flags = [];
+      if (!ID_RE.test(id)) flags.push("곡 ID 형식 오류");
+      else if (!track) flags.push("tracks.csv에 없음");
+      const others = (where.get(id) || []).filter((no) => no !== g.no);
+      if (others.length) flags.push(`#${others.join(", #")} 묶음에도 있음`);
+      return { id, track, album: track ? albums.get(track.albumId) || null : null, flags };
+    });
+    const missing = g.members.filter((m) => m.flags.some((f) => f.startsWith("곡 ID") || f.startsWith("tracks.csv"))).length;
+    const overlap = g.members.filter((m) => m.flags.some((f) => f.includes("묶음에도"))).length;
+    if (missing) g.problems.push(`찾을 수 없는 곡 ${missing}개`);
+    if (overlap) g.problems.push(`다른 묶음과 겹치는 곡 ${overlap}개`);
+
+    const found = g.members.filter((m) => m.track).map((m) => m.track);
+    const durations = found.map((t) => t.durationMs).filter((d) => d != null);
+    g.durMin = durations.length ? Math.min(...durations) : null;
+    g.durMax = durations.length ? Math.max(...durations) : null;
+    g.durSpread = durations.length ? (g.durMax - g.durMin) / 1000 : 0;
+    const withVa = found.filter((t) => t.valence != null && t.arousal != null);
+    g.vaCount = withVa.length;
+    g.vaDist = 0;
+    for (let i = 0; i < withVa.length; i++) {
+      for (let j = i + 1; j < withVa.length; j++) g.vaDist = Math.max(g.vaDist, distance(withVa[i], withVa[j]));
+    }
+    if (g.durSpread > WARN_DURATION_SEC) g.notes.push(`길이 차이 ${g.durSpread.toFixed(1)}초`);
+    if (g.vaDist > WARN_VA_DISTANCE) g.notes.push(`V/A 거리 ${g.vaDist.toFixed(2)}`);
+    g.needsCheck = g.problems.length > 0 || g.notes.length > 0;
+    g.haystack = null;
+  }
+}
+
+// ---- 화면 -------------------------------------------------------------------------
+const state = { data: null, view: [], shown: 0, sources: null, mode: "url", picked: {} };
+
+function haystack(g) {
+  if (g.haystack == null) {
+    const parts = [g.id];
+    for (const m of g.members) {
+      parts.push(m.id);
+      if (m.track) parts.push(m.track.title, m.track.artist);
+      if (m.album) parts.push(m.album.name);
+    }
+    g.haystack = parts.join("\n").toLowerCase();
+  }
+  return g.haystack;
+}
+
+function applyView() {
+  const data = state.data;
+  if (!data) return;
+  const terms = $("q").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const onlyWarn = $("onlyWarn").checked;
+  let view = data.groups.filter((g) => (!onlyWarn || g.needsCheck) && terms.every((t) => haystack(g).includes(t)));
+  const sort = $("sort").value;
+  if (sort === "size") view = view.slice().sort((a, b) => b.members.length - a.members.length || a.no - b.no);
+  else if (sort === "va") view = view.slice().sort((a, b) => b.vaDist - a.vaDist || a.no - b.no);
+  else if (sort === "dur") view = view.slice().sort((a, b) => b.durSpread - a.durSpread || a.no - b.no);
+  state.view = view;
+  state.shown = 0;
+  $("list").replaceChildren();
+  const songs = view.reduce((sum, g) => sum + g.members.length, 0);
+  $("summary").textContent = data.groups.length
+    ? `묶음 ${fmt(view.length)}개 (전체 ${fmt(data.groups.length)}개) · 곡 ${fmt(songs)}개`
+    : "";
+  $("cols").hidden = view.length === 0;
+  if (data.groups.length && !view.length) {
+    $("list").append(el("div", { class: "empty", text: "조건에 맞는 묶음이 없습니다." }));
+  }
+  renderMore();
+}
+
+function renderMore() {
+  const { view } = state;
+  // 끝 표시가 화면 근처에 남아 있으면 스크롤하지 않아도 이어서 그립니다. (큰 화면에서 목록이 멈추지 않도록)
+  while (state.shown < view.length) {
+    const next = view.slice(state.shown, state.shown + PAGE_SIZE);
+    state.shown += next.length;
+    const fragment = document.createDocumentFragment();
+    for (const g of next) fragment.append(groupCard(g));
+    $("list").append(fragment);
+    if ($("sentinel").getBoundingClientRect().top > window.innerHeight + SCROLL_MARGIN) break;
+  }
+}
+
+function groupCard(g) {
+  const head = el("div", { class: "g-head" },
+    el("span", { class: "g-no", text: `#${g.no}` }),
+    el("button", { class: "uuid", type: "button", title: `${g.id || "(비어 있음)"} — 눌러서 복사`, onclick: () => g.id && copyText(g.id, "묶음 ID") }, g.id ? g.id.slice(0, 8) : "ID 없음"),
+    el("span", { class: "chip", text: `곡 ${g.members.length}개` }),
+    g.durMin != null
+      ? el("span", { class: "chip", text: durationText(g.durMin) !== durationText(g.durMax) ? `길이 ${durationText(g.durMin)}~${durationText(g.durMax)}` : `길이 ${durationText(g.durMin)}` })
+      : null,
+    g.vaCount >= 2 && g.vaDist <= WARN_VA_DISTANCE ? el("span", { class: "chip", text: `V/A 거리 ${g.vaDist.toFixed(2)}` }) : null,
+    g.notes.map((note) => el("span", { class: "chip warn", text: note })),
+    g.problems.map((problem) => el("span", { class: "chip bad", text: problem })),
+    !g.needsCheck ? el("span", { class: "chip ok", text: "이상 없음" }) : null,
+  );
+  return el("article", { class: "group" }, head, g.members.map(trackRow));
+}
+
+function vaCell(track) {
+  if (track.valence == null || track.arousal == null) return el("span", { class: "va", text: "V/A 없음" });
+  const sign = (v) => (v > 0 ? "+" : "") + v.toFixed(2);
+  return el("span", { class: "va" }, el("b", { text: "V " }), sign(track.valence), "  ", el("b", { text: "A " }), sign(track.arousal));
+}
+
+function trackRow(member) {
+  const { id, track, album, flags } = member;
+  const link = el("a", { class: "icon", href: `https://open.spotify.com/track/${id}`, target: "_blank", rel: "noopener", title: "Spotify에서 열기" }, "▶");
+  const copy = el("button", { class: "icon", type: "button", title: "곡 ID 복사", onclick: () => copyText(id, "곡 ID") }, "⧉");
+  if (!track) {
+    return el("div", { class: "row missing" },
+      el("span"),
+      el("div", { class: "main" }, el("div", { class: "t-title", text: "곡 정보를 찾을 수 없습니다" }), el("div", { class: "t-sub", text: id })),
+      el("span", { class: "album", text: flags.join(" · ") }), el("span"), el("span"), el("span"),
+      el("div", { class: "act" }, copy),
+    );
+  }
+  const thumb = track.thumb
+    ? el("img", { class: "thumb", src: track.thumb, alt: "", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer" })
+    : el("span", { class: "thumb" });
+  thumb.addEventListener?.("error", () => thumb.classList.add("broken"));
+  const albumName = album ? album.name : "(앨범 정보 없음)";
+  const albumSub = album ? [album.type, album.year].filter(Boolean).join(" · ") : track.albumId;
+  const exact = `${(track.durationMs / 1000).toFixed(1)}초`;
+  const sign = (v) => (v > 0 ? "+" : "") + v.toFixed(2);
+  const mobileMeta = el("div", { class: "meta-m" },
+    el("span", { text: albumName }),
+    el("span", { text: durationText(track.durationMs) }),
+    track.playCount != null ? el("span", { text: `재생 ${fmt(track.playCount)}` }) : null,
+    track.valence != null ? el("span", { text: `V ${sign(track.valence)} · A ${sign(track.arousal)}` }) : null,
+  );
+  return el("div", { class: "row" },
+    thumb,
+    el("div", { class: "main" }, el("div", { class: "t-title", title: track.title, text: track.title }), el("div", { class: "t-sub", title: track.artist, text: track.artist })),
+    el("div", { class: "album", title: `${albumName} (${albumSub})` }, albumName, el("small", { text: albumSub })),
+    el("span", { class: "num dur", title: exact, text: durationText(track.durationMs) }),
+    el("span", { class: "num plays", text: track.playCount != null ? fmt(track.playCount) : "-" }),
+    el("span", { class: "dur-va" }, vaCell(track)),
+    el("div", { class: "act" }, link, copy),
+    mobileMeta,
+    flags.length ? el("div", { class: "flags" }, flags.map((f) => el("span", { class: "chip bad", text: f }))) : null,
+  );
+}
+
+function showStats() {
+  const d = state.data;
+  const parts = [`묶음 ${fmt(d.groups.length)}개`, `tracks.csv ${fmt(d.totalTracks)}곡`];
+  if (!d.hasAlbums) parts.push("앨범 파일 없음(앨범명 생략)");
+  else if (d.albumsRead) parts.push(`앨범 ${fmt(d.albumsRead)}개 확인`);
+  parts.push(`${d.seconds.toFixed(1)}초`);
+  $("stats").textContent = parts.join(" · ");
+}
+
+function showEmptyGuide() {
+  const panel = $("panel");
+  panel.replaceChildren();
+  if (state.data.groups.length) return;
+  panel.append(el("div", { class: "empty" },
+    el("div", { text: "아직 묶음이 없습니다." }),
+    el("div", {}, el("code", { text: "track_groups.csv" }), "에 행을 추가한 뒤 ‘다시 불러오기’를 누르면 여기에 표시됩니다."),
+  ));
+}
+
+// ---- 파일을 직접 고르는 화면 ----------------------------------------------------------
+function showPicker(message) {
+  const panel = $("panel");
+  $("cols").hidden = true;
+  $("list").replaceChildren();
+  $("summary").textContent = "";
+  $("stats").textContent = "파일을 불러오지 못했습니다.";
+  const slots = el("div", { class: "slots" });
+  const refresh = () => {
+    slots.replaceChildren(...Object.entries(FILES).map(([key, name]) =>
+      el("span", { class: `chip ${state.picked[key] ? "ok" : ""}`, text: `${name} ${state.picked[key] ? "✓" : key === "albums" ? "(선택)" : "(필요)"}` })));
+    open.disabled = !(state.picked.groups && state.picked.tracks);
+  };
+  const accept = (files) => {
+    for (const file of files) {
+      const key = Object.keys(FILES).find((k) => FILES[k] === file.name);
+      if (key) state.picked[key] = file;
+    }
+    refresh();
+  };
+  const input = el("input", { type: "file", multiple: true, accept: ".csv,.jsonl", hidden: true, onchange: () => accept(input.files) });
+  const open = el("button", { class: "btn", type: "button", onclick: () => {
+    state.mode = "files";
+    state.sources = {
+      groups: fileSource(state.picked.groups),
+      tracks: fileSource(state.picked.tracks),
+      albums: state.picked.albums ? fileSource(state.picked.albums) : null,
+    };
+    start();
+  } }, "열기");
+  const drop = el("div", {
+    class: "drop",
+    ondragover: (e) => { e.preventDefault(); drop.classList.add("over"); },
+    ondragleave: () => drop.classList.remove("over"),
+    ondrop: (e) => { e.preventDefault(); drop.classList.remove("over"); accept(e.dataTransfer.files); },
+  }, "세 파일을 여기로 끌어다 놓거나 ", el("button", { class: "btn", type: "button", onclick: () => input.click() }, "파일 선택"));
+  panel.replaceChildren(el("div", { class: "panel" },
+    el("h2", { text: "파일을 직접 선택해 주세요" }),
+    el("div", {}, "브라우저는 파일을 더블클릭해 연 페이지가 같은 폴더의 파일을 읽지 못하게 막습니다. 아래 명령으로 서버를 실행한 뒤 ",
+      el("code", { text: "http://localhost:8000/track_groups_viewer.html" }), "을 열면 자동으로 불러옵니다."),
+    el("div", { style: "margin-top:8px" }, el("code", { text: "python3 -m http.server 8000 --bind 127.0.0.1 --directory v4/data" })),
+    drop, slots, el("div", { style: "margin-top:10px" }, open), input,
+    message ? el("div", { class: "err", text: message }) : null,
+  ));
+  refresh();
+}
+
+// ---- 시작 -------------------------------------------------------------------------
+async function start() {
+  $("panel").replaceChildren();
+  try {
+    state.data = await loadData(state.sources, (text) => { $("stats").textContent = text; });
+  } catch (error) {
+    if (state.mode === "url") showPicker(`${error.message}`);
+    else { $("stats").textContent = "불러오지 못했습니다."; $("panel").replaceChildren(el("div", { class: "panel" }, el("div", { class: "err", text: error.message }))); }
+    return;
+  }
+  showStats();
+  showEmptyGuide();
+  applyView();
+}
+
+function boot() {
+  state.mode = "url";
+  state.sources = {
+    groups: urlSource(FILES.groups),
+    tracks: urlSource(FILES.tracks),
+    albums: urlSource(FILES.albums),
+  };
+  start();
+}
+
+let timer;
+$("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(applyView, 150); });
+$("sort").addEventListener("change", applyView);
+$("onlyWarn").addEventListener("change", applyView);
+$("reload").addEventListener("click", () => (state.mode === "url" ? boot() : start()));
+new IntersectionObserver((entries) => { if (entries[0].isIntersecting) renderMore(); }, { rootMargin: `${SCROLL_MARGIN}px` })
+  .observe($("sentinel"));
+
+if (location.protocol === "file:") showPicker("");
+else boot();
+</script>
+</body>
+</html>
