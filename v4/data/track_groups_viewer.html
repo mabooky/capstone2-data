@@ -208,6 +208,10 @@
       <div class="pane-title"><h2>묶이지 않은 곡</h2><span class="summary" id="summaryL"></span></div>
       <div class="tools">
         <input type="search" id="qL" placeholder="제목, 아티스트, 앨범, 곡 ID로 찾기" aria-label="곡 검색">
+        <select id="sortL" aria-label="곡 정렬">
+          <option value="file">파일 순서</option>
+          <option value="artist">아티스트, 제목 순</option>
+        </select>
       </div>
       <div class="ref-bar" id="refBar" hidden><span id="refText"></span><button class="btn" id="refClear" type="button">기준 해제</button></div>
     </div>
@@ -720,10 +724,25 @@ function titleKey(title) {
   return words.join("").replace(/[^0-9a-z\u3040-\u30ff\u3131-\u318e\uac00-\ud7a3\u4e00-\u9fff]/g, "");
 }
 
+function trackKey(track) {
+  if (track.key == null) track.key = titleKey(track.title);
+  return track.key;
+}
+
+const collator = new Intl.Collator("ko");
+
+// 묶이지 않은 곡의 기본 정렬입니다. 기준 묶음이 있으면 이것은 같은 점수일 때의 순서로만 쓰입니다.
+function looseOrder(a, b) {
+  if ($("sortL").value === "artist") {
+    return collator.compare(a.artist, b.artist) || (trackKey(a) < trackKey(b) ? -1 : trackKey(a) > trackKey(b) ? 1 : 0) || a.order - b.order;
+  }
+  return a.order - b.order;
+}
+
 // 글자 2개 단위(바이그램)의 집합입니다. 한 글자뿐이면 그 글자 하나입니다.
 function titleGrams(track) {
   if (track.grams == null) {
-    const key = titleKey(track.title);
+    const key = trackKey(track);
     const grams = new Set();
     if (key.length === 1) grams.add(key);
     for (let i = 0; i + 1 < key.length; i++) grams.add(key.slice(i, i + 2));
@@ -797,7 +816,7 @@ function refreshGroups(keep = false) {
 function refreshLoose(keep = false) {
   const words = terms("qL");
   let view = state.loose.filter((t) => words.every((w) => trackHaystack(t).includes(w)));
-  if (state.scores) view = view.slice().sort((a, b) => scoreOf(b.id) - scoreOf(a.id) || a.order - b.order);
+  view = view.slice().sort((a, b) => (state.scores ? scoreOf(b.id) - scoreOf(a.id) : 0) || looseOrder(a, b));
   $("summaryL").textContent = `${fmt(view.length)}곡 (전체 ${fmt(state.loose.length)}곡)`;
   looseList.reset(view, keep);
   if (!view.length) {
@@ -986,6 +1005,7 @@ let timerG, timerL;
 $("qG").addEventListener("input", () => { clearTimeout(timerG); timerG = setTimeout(() => refreshGroups(), 150); });
 $("qL").addEventListener("input", () => { clearTimeout(timerL); timerL = setTimeout(() => refreshLoose(), 150); });
 $("sort").addEventListener("change", () => refreshGroups());
+$("sortL").addEventListener("change", () => refreshLoose());
 $("onlyWarn").addEventListener("change", () => refreshGroups());
 $("refClear").addEventListener("click", () => { dropRef(); refreshGroups(true); refreshLoose(); });
 $("reload").addEventListener("click", () => start());
