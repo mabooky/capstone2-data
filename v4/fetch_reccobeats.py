@@ -1,6 +1,6 @@
-"""곡의 오디오 특징을 ReccoBeats에서 조회해 data/audio_features.jsonl에 저장합니다.
+"""곡의 ISRC와 오디오 특징을 ReccoBeats에서 조회해 data/reccobeats.jsonl에 저장합니다.
 
-    python v4/fetch_audio_features.py [--concurrency 3] [--batch-size 40] [--limit 개수] [--input 파일] [--output 파일]
+    python v4/fetch_reccobeats.py [--concurrency 3] [--batch-size 40] [--limit 개수] [--input 파일] [--output 파일]
 
 - data/tracks.jsonl의 곡 ID(Spotify)를 batch-size개씩 묶어 ReccoBeats의 GET /v1/audio-features에 요청합니다.
 - 응답에 있는 곡마다 한 줄을 다음 형식으로 기록합니다. 값은 응답 그대로이며 ID 두 개의 이름만 바꾸었습니다.
@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DEFAULT_INPUT = DATA_DIR / "tracks.jsonl"
-DEFAULT_OUTPUT = DATA_DIR / "audio_features.jsonl"
+DEFAULT_OUTPUT = DATA_DIR / "reccobeats.jsonl"
 API_URL = "https://api.reccobeats.com/v1/audio-features"
 FEATURE_FIELDS = [
     "isrc", "acousticness", "danceability", "energy", "instrumentalness", "key",
@@ -48,7 +48,7 @@ class RateLimited(Exception):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="곡의 오디오 특징을 조회해 저장합니다.")
+    parser = argparse.ArgumentParser(description="곡의 ReccoBeats 데이터를 조회해 저장합니다.")
     parser.add_argument("--concurrency", type=int, default=3, help="동시 요청 수. 기본값은 3")
     parser.add_argument("--batch-size", type=int, default=40, help="요청 한 번에 조회할 곡 수. 기본값은 40")
     parser.add_argument("--limit", type=int, help="이번 실행에서 조회할 최대 곡 수")

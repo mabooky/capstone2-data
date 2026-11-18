@@ -35,13 +35,13 @@ python v4/collect_seed_artists.py --yes    # CSV 끝에 덧붙이기
 | 1 | `fetch_discographies.py` | `seed-artists.csv` | `data/discographies.jsonl` |
 | 2 | `fetch_albums.py` | `data/discographies.jsonl` | `data/albums.jsonl` |
 | 3 | `flatten_tracks.py` | `data/albums.jsonl` | `data/tracks.jsonl` |
-| 4 | `fetch_audio_features.py` | `data/tracks.jsonl` | `data/audio_features.jsonl` |
+| 4 | `fetch_reccobeats.py` | `data/tracks.jsonl` | `data/reccobeats.jsonl` |
 
 ```bash
 python v4/fetch_discographies.py
 python v4/fetch_albums.py
 python v4/flatten_tracks.py
-python v4/fetch_audio_features.py
+python v4/fetch_reccobeats.py
 ```
 
 ### 1. 아티스트별 디스코그래피
@@ -71,9 +71,9 @@ python v4/fetch_audio_features.py
 
 앨범 안의 곡 순서는 담지 않습니다. `albums.jsonl`의 수록곡 배열 순서가 그 순서입니다.
 
-### 4. 오디오 특징
+### 4. ReccoBeats 데이터
 
-곡의 Spotify ID를 40개씩 묶어 ReccoBeats에서 오디오 특징을 조회합니다. ReccoBeats에 있는 곡마다 한 줄을 기록합니다.
+곡의 Spotify ID를 40개씩 묶어 ReccoBeats에서 ISRC와 오디오 특징을 함께 조회합니다. ReccoBeats에 있는 곡마다 한 줄을 기록합니다.
 
 ```json
 {"spotify_id", "reccobeats_id", "isrc", "acousticness", "danceability", "energy", "instrumentalness",
