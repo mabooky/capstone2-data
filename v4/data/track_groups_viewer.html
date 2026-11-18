@@ -92,7 +92,7 @@
 
   /* 목록 */
   .row {
-    display: grid; grid-template-columns: 44px minmax(0, 1.6fr) minmax(0, 1fr) 44px 64px;
+    display: grid; grid-template-columns: 44px minmax(0, 1.6fr) minmax(0, 1fr) 44px 96px;
     column-gap: 10px; align-items: center;
     padding: 7px 12px; border-top: 1px solid var(--line);
     cursor: grab;
@@ -102,6 +102,11 @@
   .row.missing { background: var(--bad-bg); color: var(--bad-ink); }
   .row.drop-ok { outline: 2px solid var(--accent); outline-offset: -2px; }
   .row.dragging { opacity: .45; }
+  .row.ref { background: var(--ok-bg); }
+  .icon.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .ref-bar { display: flex; align-items: center; gap: 8px; background: var(--ok-bg); color: var(--ok-ink); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; }
+  .ref-bar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .score { color: var(--ok-ink); font-weight: 600; }
   .loose-list { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .group {
@@ -189,6 +194,7 @@
         <select id="sort" aria-label="정렬">
           <option value="file">파일 순서</option>
           <option value="size">곡 많은 순</option>
+          <option value="sim" disabled>기준 곡과 제목이 비슷한 순</option>
         </select>
         <label class="check"><input type="checkbox" id="onlyWarn"> 점검이 필요한 묶음만</label>
       </div>
@@ -204,6 +210,7 @@
       <div class="tools">
         <input type="search" id="qL" placeholder="제목, 아티스트, 앨범, 곡 ID로 찾기" aria-label="곡 검색">
       </div>
+      <div class="ref-bar" id="refBar" hidden><span id="refText"></span><button class="btn" id="refClear" type="button">기준 해제</button></div>
     </div>
     <div class="pane-body" id="bodyL">
       <div class="loose-list" id="listL"></div>
@@ -382,7 +389,7 @@ function parseArray(text) {
 const state = {
   dir: null, groupsHandle: null, stamp: null, busy: false, drag: null,
   groups: [], tracks: new Map(), trackList: [], albums: new Map(), where: new Map(), loose: [],
-  info: null,
+  info: null, ref: null, scores: null,
 };
 
 async function loadData(setStatus) {
@@ -549,6 +556,7 @@ async function commit(compute) {
     await saveGroups(next);
     state.groups = next;
     rebuild();
+    if (state.ref && state.where.has(state.ref)) dropRef();  // 기준 곡이 묶음에 들어가면 기준을 풉니다.
     refreshGroups(true);
     refreshLoose(true);
     showStats();
@@ -638,6 +646,7 @@ function makeList(body, list, sentinel, build) {
     L.items = items;
     L.shown = 0;
     list.replaceChildren();
+    if (!keep) body.scrollTop = 0;
     L.fill(min);
     if (keep) body.scrollTop = top;
   };
@@ -673,12 +682,107 @@ function trackHaystack(t) {
   return t.hay;
 }
 
+// ---- 제목 유사도 --------------------------------------------------------------------
+// 3~5단계에서 쓴 제목 정리 규칙을 옮긴 것입니다. 버전 표식과 구두점을 떼고 글자와 숫자만 남깁니다.
+const VOCAB = new Set(`inst instrumental instrument mr 경음악 반주 인스트 live 라이브 remaster remastered remastering 리마스터 edit edited radio album single extended short full tv size ver version 버전
+remix remixes remixed mix 리믹스 믹스 sped up slowed down reverb nightcore acoustic 어쿠스틱 piano orchestra orchestral strings rearranged arrange arranged unplugged stripped acapella a cappella
+japanese japan jp jpn english eng korean kor chinese cn mandarin spanish esp 일본어 영어 한국어 중국어 clean explicit original bonus track title demo digital the of and`.split(/\s+/));
+const END = new Set(["ver", "version", "mix", "remix", "edit", "remaster", "remastered", "리마스터", "버전", "믹스", "track"]);
+const START = new Set(["live", "라이브", "feat", "ft", "featuring", "with", "prod", "duet"]);
+const TAIL = new Set(["inst", "instrumental", "mr", "반주", "경음악", "인스트"]);
+const TOK = /[0-9a-z\u3131-\u318e\uac00-\ud7a3\u4e00-\u9fff]+/g;
+const tokens = (text) => text.toLowerCase().match(TOK) || [];
+
+function qualifies(segment) {
+  const toks = tokens(segment);
+  if (!toks.length) return false;
+  if (START.has(toks[0])) return true;
+  if (toks.every((t) => VOCAB.has(t) || /^\d+$/.test(t))) return true;
+  return END.has(toks[toks.length - 1]);
+}
+
+function titleKey(title) {
+  let t = title.normalize("NFKC");
+  t = t.replace(/[\(\[]([^\)\]]*)[\)\]]/g, (m, segment) => (qualifies(segment) ? " " : m));
+  const parts = t.split(/\s[-–~]\s*/);
+  if (parts.length > 1) {
+    const keep = [parts[0]];
+    for (const part of parts.slice(1)) {
+      const first = tokens(part)[0];
+      if (first === "live" || first === "라이브") break;  // Live로 시작하는 덩어리와 그 뒤는 모두 뗍니다.
+      keep.push(part);
+    }
+    while (keep.length > 1 && qualifies(keep[keep.length - 1])) keep.pop();
+    t = keep.join(" - ");
+  }
+  const words = t.replace(/[\s\-–~\(\)\[\]]+/g, " ").trim().toLowerCase().split(" ");
+  while (words.length > 1 && TAIL.has(words[words.length - 1].replace(/[^0-9a-z가-힣]/g, ""))) words.pop();
+  return words.join("").replace(/[^0-9a-z\u3040-\u30ff\u3131-\u318e\uac00-\ud7a3\u4e00-\u9fff]/g, "");
+}
+
+// 글자 2개 단위(바이그램)의 집합입니다. 한 글자뿐이면 그 글자 하나입니다.
+function titleGrams(track) {
+  if (track.grams == null) {
+    const key = titleKey(track.title);
+    const grams = new Set();
+    if (key.length === 1) grams.add(key);
+    for (let i = 0; i + 1 < key.length; i++) grams.add(key.slice(i, i + 2));
+    track.grams = grams;
+  }
+  return track.grams;
+}
+
+// 두 제목의 바이그램이 얼마나 겹치는지(Dice 계수, 0~1)입니다.
+function similarity(a, b) {
+  if (!a.size || !b.size) return 0;
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  let common = 0;
+  for (const gram of small) if (large.has(gram)) common++;
+  return (2 * common) / (a.size + b.size);
+}
+
+function setRef(id) {
+  const ref = state.tracks.get(id);
+  if (!ref) return;
+  const grams = titleGrams(ref);
+  const scores = new Map();
+  for (const track of state.trackList) if (hasVa(track)) scores.set(track.id, track.id === id ? 1 : similarity(grams, titleGrams(track)));
+  state.ref = id;
+  state.scores = scores;
+  $("sort").querySelector('option[value="sim"]').disabled = false;
+  $("sort").value = "sim";
+  showRefBar();
+  refreshGroups();
+  refreshLoose();
+}
+
+// 기준 곡을 풀고 화면 정렬을 원래대로 돌립니다. 화면을 다시 그릴지는 호출한 쪽이 정합니다.
+function dropRef() {
+  state.ref = null;
+  state.scores = null;
+  const option = $("sort").querySelector('option[value="sim"]');
+  option.disabled = true;
+  if ($("sort").value === "sim") $("sort").value = "file";
+  showRefBar();
+}
+
+function showRefBar() {
+  const ref = state.ref && state.tracks.get(state.ref);
+  $("refBar").hidden = !ref;
+  if (ref) $("refText").textContent = `기준 곡: ${ref.title} — ${ref.artist} · 제목이 비슷한 순으로 정렬 중`;
+}
+
+const scoreOf = (id) => (state.scores ? state.scores.get(id) ?? 0 : null);
+const percent = (score) => `${Math.round(score * 100)}%`;
+
 function refreshGroups(keep = false) {
   const all = state.groups;
   const words = terms("qG");
   const onlyWarn = $("onlyWarn").checked;
   let view = all.filter((g) => (!onlyWarn || g.needsCheck) && words.every((t) => groupHaystack(g).includes(t)));
+  for (const g of all) g.score = state.scores ? Math.max(0, ...g.members.map((m) => scoreOf(m.id))) : null;
   if ($("sort").value === "size") view = view.slice().sort((a, b) => b.members.length - a.members.length || a.no - b.no);
+  else if ($("sort").value === "sim" && state.scores) view = view.slice().sort((a, b) => b.score - a.score || a.no - b.no);
   const songs = view.reduce((sum, g) => sum + g.members.length, 0);
   $("summaryG").textContent = `${fmt(view.length)}개 (전체 ${fmt(all.length)}개) · 곡 ${fmt(songs)}개`;
   groupList.reset(view, keep);
@@ -689,7 +793,8 @@ function refreshGroups(keep = false) {
 
 function refreshLoose(keep = false) {
   const words = terms("qL");
-  const view = state.loose.filter((t) => words.every((w) => trackHaystack(t).includes(w)));
+  let view = state.loose.filter((t) => words.every((w) => trackHaystack(t).includes(w)));
+  if (state.scores) view = view.slice().sort((a, b) => (b.id === state.ref) - (a.id === state.ref) || scoreOf(b.id) - scoreOf(a.id) || a.order - b.order);
   $("summaryL").textContent = `${fmt(view.length)}곡 (전체 ${fmt(state.loose.length)}곡)`;
   looseList.reset(view, keep);
   if (!view.length) {
@@ -709,6 +814,7 @@ function groupCard(g) {
     g.durMin != null
       ? el("span", { class: "chip", text: durationText(g.durMin) !== durationText(g.durMax) ? `길이 ${durationText(g.durMin)}~${durationText(g.durMax)}` : `길이 ${durationText(g.durMin)}` })
       : null,
+    g.score != null ? el("span", { class: "chip ok", text: `제목 유사도 ${percent(g.score)}` }) : null,
     g.problems.map((problem) => el("span", { class: "chip bad", text: problem })),
     !g.needsCheck ? el("span", { class: "chip ok", text: "이상 없음" }) : null,
   );
@@ -732,6 +838,10 @@ function trackRow(member, groupId = null) {
   const { id, track, album, flags } = member;
   const link = el("a", { class: "icon", href: `https://open.spotify.com/track/${id}`, target: "_blank", rel: "noopener", title: "Spotify에서 열기", draggable: "false" }, "▶");
   const copy = el("button", { class: "icon", type: "button", title: "곡 ID 복사", onclick: () => copyText(id, "곡 ID") }, "⧉");
+  const isRef = groupId == null && state.ref === id;
+  const refButton = groupId == null && track && hasVa(track)
+    ? el("button", { class: `icon${isRef ? " on" : ""}`, type: "button", title: isRef ? "이미 기준으로 삼은 곡입니다" : "이 곡을 기준으로 제목이 비슷한 순으로 정렬", onclick: () => setRef(id) }, "◎")
+    : null;
   let row;
   if (!track) {
     row = el("div", { class: "row missing" },
@@ -747,7 +857,9 @@ function trackRow(member, groupId = null) {
     thumb.addEventListener?.("error", () => thumb.classList.add("broken"));
     const albumName = album ? album.name : "(앨범 정보 없음)";
     const albumSub = album ? [album.type, album.year].filter(Boolean).join(" · ") : track.albumId;
+    const score = groupId == null ? scoreOf(id) : null;
     const meta = [
+      score != null ? el("span", { class: "score", text: isRef ? "기준 곡" : `제목 유사도 ${percent(score)}` }) : null,
       track.playCount != null ? `재생 ${fmt(track.playCount)}` : null,
       hasVa(track) ? el("span", {}, el("b", { text: "V " }), sign(track.valence), " ", el("b", { text: "A " }), sign(track.arousal)) : "V/A 없음",
     ].filter(Boolean);
@@ -761,11 +873,12 @@ function trackRow(member, groupId = null) {
         metaLine),
       el("div", { class: "album", title: `${albumName} (${albumSub})` }, albumName, el("small", { text: albumSub })),
       el("span", { class: "num", title: `${(track.durationMs / 1000).toFixed(1)}초`, text: durationText(track.durationMs) }),
-      el("div", { class: "act" }, link, copy),
+      el("div", { class: "act" }, refButton, link, copy),
       flags.length ? el("div", { class: "flags" }, flags.map((f) => el("span", { class: "chip bad", text: f }))) : null,
     );
   }
 
+  if (isRef) row.classList.add("ref");
   row.draggable = true;
   row.addEventListener("dragstart", (e) => {
     state.drag = { id, from: groupId };
@@ -839,6 +952,7 @@ async function chooseDir(stored) {
 // ---- 시작 -------------------------------------------------------------------------
 async function start() {
   $("gate").replaceChildren();
+  dropRef();
   $("hint").hidden = true;
   $("stats").textContent = "불러오는 중…";
   try {
@@ -874,6 +988,7 @@ $("qG").addEventListener("input", () => { clearTimeout(timerG); timerG = setTime
 $("qL").addEventListener("input", () => { clearTimeout(timerL); timerL = setTimeout(() => refreshLoose(), 150); });
 $("sort").addEventListener("change", () => refreshGroups());
 $("onlyWarn").addEventListener("change", () => refreshGroups());
+$("refClear").addEventListener("click", () => { dropRef(); refreshGroups(); refreshLoose(); });
 $("reload").addEventListener("click", () => start());
 $("change").addEventListener("click", async () => showGate("", await storedHandle()));
 
