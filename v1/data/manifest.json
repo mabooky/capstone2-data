@@ -1,0 +1,98 @@
+{
+  "format_version": "music-compact-experiment-v2",
+  "dataset_kind": "unverified-local-experiment-v1",
+  "dataset_id": "music-experiment-20261020-v3",
+  "id_namespace": "music_experiment.common_songs",
+  "verified": false,
+  "canonical_song_ids": false,
+  "coordinate_space": "normalized-minus-one-to-one-v1",
+  "songs": 27948,
+  "columns": [
+    "experiment_song_id",
+    "spotify_id",
+    "reccobeats_source_id",
+    "muse_source_id",
+    "reccobeats_source_version",
+    "reccobeats_valence_raw",
+    "reccobeats_energy_raw",
+    "muse_valence_raw",
+    "muse_arousal_raw",
+    "reccobeats_valence",
+    "reccobeats_energy",
+    "muse_theoretical_valence",
+    "muse_theoretical_arousal",
+    "muse_observed_valence",
+    "muse_observed_arousal",
+    "title",
+    "artist"
+  ],
+  "models": [
+    "A",
+    "B1",
+    "B2",
+    "C1",
+    "C2"
+  ],
+  "artifacts": {
+    "songs.jsonl": {
+      "bytes": 9285573,
+      "sha256": "66b805a1f1654006a1a067ad6b05d6822759bb089162a5cdea85b5453a00fcee"
+    },
+    "normalization.json": {
+      "bytes": 2928,
+      "sha256": "e49aeeed316593200e7cd9d38b387913e9b9d79794f3682896d69c87582a4c30"
+    }
+  },
+  "source": {
+    "dataset": "music-experiment-20261020-v3",
+    "manifest_sha256": "8d2007396fd12b392c03fef95bd2f09ed7a0ac8bee4eb7b2b7ffa7e8e2011ce8",
+    "database_views": [
+      "music_experiment.model_a",
+      "music_experiment.model_b1",
+      "music_experiment.model_b2",
+      "music_experiment.model_c1",
+      "music_experiment.model_c2"
+    ]
+  },
+  "validation": {
+    "model_rows_compared": 139740,
+    "coordinate_pairs_compared": 139740,
+    "all_14_fields_equal_to_pglite": true,
+    "original_files_unchanged": true,
+    "original_files_checked": 1027,
+    "metadata_rows_matched": 27948,
+    "metadata_missing_or_conflicting_rows": 0
+  },
+  "rights": {
+    "github_sharing_authorized_by": "Project owner confirmation in user instruction, 2026-10-27",
+    "authorization_document": "Not supplied; see README.md. No additional open license is asserted.",
+    "muse": {
+      "title": "MuSe: The Musical Sentiment Dataset",
+      "authors": [
+        "Christopher Akiki",
+        "Manuel Burghardt"
+      ],
+      "source": "https://zenodo.org/records/4281165",
+      "version": "1.0.0",
+      "license": "CC BY 4.0"
+    },
+    "reccobeats": {
+      "source": "https://reccobeats.com",
+      "terms": "https://reccobeats.com/docs/documentation/terms-of-service"
+    }
+  },
+  "metadata": {
+    "provider": "muse",
+    "source_version": "zenodo-4281165-v1.0.0",
+    "source_file": "muse_dataset.csv",
+    "source_sha256": "56be88aea7dfa2c0446e0d7cc033d95c3550a3dc4364ac91c815cf998265fd2b",
+    "fields": {
+      "title": "track",
+      "artist": "artist"
+    },
+    "matching": "Exact Spotify ID; exactly one original and cleaned source row; ReccoBeats muse_external_ids cross-checked",
+    "spotify_officially_verified": false,
+    "previous_songs_sha256": "d4d690d86ad26f8011e710f798c85e13b346800d3626ff0641af4c3d1f368f6d",
+    "original_15_columns_and_row_order_preserved": true
+  }
+}

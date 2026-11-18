@@ -1,0 +1,102 @@
+{
+  "format_version": "music-experiment-normalization-v1",
+  "shared_source_versions": {
+    "muse": "zenodo-4281165-v1.0.0"
+  },
+  "axes": {
+    "reccobeats_valence": {
+      "kind": "theoretical",
+      "metric": "valence",
+      "formula": "2*(x-raw_min)/(raw_max-raw_min)-1",
+      "raw_max": 1,
+      "raw_min": 0,
+      "version": "reccobeats-v1",
+      "provider": "reccobeats",
+      "policy_date": "2026-10-17",
+      "source_sha256": null,
+      "population_rows": null
+    },
+    "reccobeats_energy": {
+      "kind": "theoretical",
+      "metric": "energy",
+      "formula": "2*(x-raw_min)/(raw_max-raw_min)-1",
+      "raw_max": 1,
+      "raw_min": 0,
+      "version": "reccobeats-v1",
+      "provider": "reccobeats",
+      "policy_date": "2026-10-17",
+      "source_sha256": null,
+      "population_rows": null
+    },
+    "muse_theoretical_valence": {
+      "kind": "theoretical",
+      "metric": "valence",
+      "formula": "2*(x-raw_min)/(raw_max-raw_min)-1",
+      "raw_max": 9,
+      "raw_min": 0,
+      "version": "muse-theoretical-v1",
+      "provider": "muse",
+      "policy_date": "2026-10-17",
+      "source_sha256": "56be88aea7dfa2c0446e0d7cc033d95c3550a3dc4364ac91c815cf998265fd2b",
+      "population_rows": 90408
+    },
+    "muse_theoretical_arousal": {
+      "kind": "theoretical",
+      "metric": "arousal",
+      "formula": "2*(x-raw_min)/(raw_max-raw_min)-1",
+      "raw_max": 9,
+      "raw_min": 0,
+      "version": "muse-theoretical-v1",
+      "provider": "muse",
+      "policy_date": "2026-10-17",
+      "source_sha256": "56be88aea7dfa2c0446e0d7cc033d95c3550a3dc4364ac91c815cf998265fd2b",
+      "population_rows": 90408
+    },
+    "muse_observed_valence": {
+      "kind": "observed",
+      "metric": "valence",
+      "formula": "2*(x-raw_min)/(raw_max-raw_min)-1",
+      "raw_max": 8.475,
+      "raw_min": 0.23500000000000001,
+      "version": "muse-observed-v1",
+      "provider": "muse",
+      "policy_date": "2026-10-17",
+      "source_sha256": "56be88aea7dfa2c0446e0d7cc033d95c3550a3dc4364ac91c815cf998265fd2b",
+      "population_rows": 90408
+    },
+    "muse_observed_arousal": {
+      "kind": "observed",
+      "metric": "arousal",
+      "formula": "2*(x-raw_min)/(raw_max-raw_min)-1",
+      "raw_max": 7.27,
+      "raw_min": 0.1081132075471698,
+      "version": "muse-observed-v1",
+      "provider": "muse",
+      "policy_date": "2026-10-17",
+      "source_sha256": "56be88aea7dfa2c0446e0d7cc033d95c3550a3dc4364ac91c815cf998265fd2b",
+      "population_rows": 90408
+    }
+  },
+  "models": {
+    "A": [
+      "reccobeats_valence",
+      "reccobeats_energy"
+    ],
+    "B1": [
+      "muse_theoretical_valence",
+      "muse_theoretical_arousal"
+    ],
+    "B2": [
+      "muse_observed_valence",
+      "muse_observed_arousal"
+    ],
+    "C1": [
+      "reccobeats_valence",
+      "muse_theoretical_arousal"
+    ],
+    "C2": [
+      "reccobeats_valence",
+      "muse_observed_arousal"
+    ]
+  }
+}
