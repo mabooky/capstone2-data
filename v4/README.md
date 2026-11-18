@@ -36,7 +36,7 @@ python v4/collect_seed_artists.py --yes    # CSV 끝에 덧붙이기
 | 2 | `fetch_albums.py` | `data/discographies.jsonl` | `data/albums.jsonl` |
 | 3 | `flatten_tracks.py` | `data/albums.jsonl` | `data/tracks.jsonl` |
 | 4 | `fetch_reccobeats.py` | `data/tracks.jsonl` | `data/reccobeats.jsonl` |
-| 5 | `export_missing_ids.py` | `data/tracks.jsonl`, `data/reccobeats.jsonl` | `data/missing_ids.txt` |
+| 5 | `export_missing_ids.py` | `data/tracks.jsonl`, `data/reccobeats.jsonl` | `data/missing_ids.csv` |
 
 ```bash
 python v4/fetch_discographies.py
@@ -88,8 +88,8 @@ ReccoBeats에 값이 없는 곡은 기록하지 않으므로 다시 실행하면
 
 ### 5. ReccoBeats에 없는 곡의 ID 목록
 
-`tracks.jsonl`의 곡 중 `reccobeats.jsonl`에 없는 곡, 즉 ISRC와 (valence, arousal)을 ReccoBeats에서 얻지 못한 곡의 Spotify ID를 `tracks.jsonl`의 순서대로 한 줄에 하나씩 적습니다.
-ISRC 조회 도구에 직접 올릴 목록을 만드는 단계이며, 파일만 읽고 쓰고 네트워크에는 접속하지 않습니다.
+`tracks.jsonl`의 곡 중 `reccobeats.jsonl`에 없는 곡, 즉 ISRC와 (valence, arousal)을 ReccoBeats에서 얻지 못한 곡을 `tracks.jsonl`의 순서대로 CSV에 적습니다.
+열은 `spotify_id`, `isrc` 두 개이며 `isrc` 열은 비어 있습니다. ISRC 조회 도구에 직접 올리고 결과를 채울 목록을 만드는 단계이며, 파일만 읽고 쓰고 네트워크에는 접속하지 않습니다.
 
 ## 수집 스크립트의 공통 동작
 
