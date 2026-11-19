@@ -106,7 +106,13 @@ python v4/upload_albums.py          # 미리 보기
 python v4/upload_albums.py --yes    # 실제로 올리기
 ```
 
-`tracks_v4`를 적재하는 단계는 아직 없습니다. `tracks.csv`는 그 테이블과 같은 열로 되어 있습니다.
+`upload_tracks.py`는 `tracks.csv`에서 `valence`, `arousal`이 있는 곡을 `tracks_v4` 테이블에 올립니다. 사용법과 안전장치는 `upload_albums.py`와 같습니다(`--yes`가 없으면 미리 보기).
+곡의 `album_id`가 가리키는 앨범이 `albums_v4`에 모두 있어야 하므로 `upload_albums.py`를 먼저 실행합니다. 앨범이 없으면 아무것도 올리지 않고 알려 줍니다.
+
+```bash
+python v4/upload_tracks.py          # 미리 보기
+python v4/upload_tracks.py --yes    # 실제로 올리기
+```
 
 ## 수집 스크립트의 공통 동작
 
@@ -197,5 +203,5 @@ Chrome이나 Edge에서 HTML 파일을 직접 열고 `data` 폴더를 선택합�
 
 - `data/track_groups.csv`, `data/track_groups_viewer.html`: 곡 묶음 정의 파일과 그 내용을 보는 화면입니다. ([곡 묶음](#곡-묶음-datatrack_groupscsv) 참고)
 - `seed-artists.csv`, `collect_seed_artists.py`: 시드 아티스트 목록과 그 목록을 늘리는 스크립트입니다.
-- `db.py`: `.env`를 읽고 DB에 접속하는 공통 모듈입니다. `upload_albums.py`가 씁니다.
-- `schema.sql`: DB 테이블(`albums_v4`, `tracks_v4`)의 형식을 보여 주는 파일이며 실행용이 아닙니다. 실제로 테이블을 만드는 문장은 `upload_albums.py`에 있고, `tracks_v4`는 아직 DB에 만들지 않았습니다.
+- `db.py`: `.env`를 읽고 DB에 접속하는 공통 모듈입니다. `upload_albums.py`, `upload_tracks.py`가 씁니다.
+- `schema.sql`: DB 테이블(`albums_v4`, `tracks_v4`)의 형식을 보여 주는 파일이며 실행용이 아닙니다. 실제로 테이블을 만드는 문장은 `upload_albums.py`(`albums_v4`)와 `upload_tracks.py`(`tracks_v4`)에 있습니다.
