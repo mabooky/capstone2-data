@@ -52,6 +52,11 @@ python v4/fill_using_reccobeats.py
 
 DB에 올리는 `upload_albums.py`는 이 순서와 별개로, 2단계가 끝난 뒤 언제든 실행할 수 있습니다. ([DB 적재](#db-적재) 참고)
 
+`fetch_artists.py`도 2단계가 끝난 뒤 언제든 실행할 수 있습니다. `data/albums.jsonl`의 앨범과 수록곡에 나오는 모든 아티스트(약 4,650명)를 중복 없이 모아 조회해 `data/artists.jsonl`에 저장합니다.
+한 줄이 아티스트 한 명이며 `{"artist_id", "artist": {id, name, image_url_640, image_url_320, image_url_160, monthly_listeners, top_tracks}}` 형식입니다.
+필요한 값만 골라 저장하므로 응답 전체를 저장하는 `fetch_albums.py`와 다릅니다. 프로필 사진이 없는 아티스트는 640픽셀 이미지만 있고 나머지 크기는 `null`일 수 있으며, 그 640픽셀 이미지가 앨범 커버일 때도 있습니다.
+기록되지 않은 아티스트는 다시 실행하면 이어서 받습니다.
+
 ### 1. 아티스트별 디스코그래피
 
 `seed-artists.csv`의 아티스트마다 앨범 목록(ID, 이름, 이미지)을 조회합니다. ID가 비었거나 중복된 행은 건너뜁니다.
