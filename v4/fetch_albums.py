@@ -10,11 +10,16 @@
 - 요청 속도는 --concurrency로 조절하며, 요청이 제한되면 쉬었다가 몇 번 다시 시도합니다.
 - 아티스트 이름의 표기 언어는 --locale(BCP-47 언어 태그, 기본값 ko)로 정합니다. 지정하지 않으면 영어 표기로 받습니다.
   언어를 바꿔 다시 받을 때는 이미 기록된 앨범을 건너뛰므로 기존 출력 파일을 먼저 치워야 합니다.
+- 응답에서 아티스트의 id와 uri가 모두 비어 있는 항목은 조회가 끝난 뒤 MISSING_ARTIST_IDS의 값으로 채웁니다.
+  앨범 ID와 아티스트 이름(ko 표기)으로 찾으며, 앨범의 artists와 수록곡의 artists 모두에 적용합니다.
+  응답을 가공하지 않는다는 원칙의 유일한 예외이며, 다시 받아도 같은 결과가 나오도록 이 스크립트가 보정을 맡습니다.
+  이미 채워졌으면 아무것도 바꾸지 않으므로 몇 번 실행해도 같고, 조회할 앨범이 없을 때도 실행합니다.
 """
 
 import argparse
 import asyncio
 import json
+import os
 import signal
 from pathlib import Path
 
@@ -28,6 +33,16 @@ DEFAULT_OUTPUT = DATA_DIR / "albums.jsonl"
 RATE_LIMIT_PAUSE_SEC = 60  # 서버가 대기 시간을 알려 주지 않을 때 쉬는 시간
 MAX_RATE_LIMIT_RETRIES = 3
 MAX_CONSECUTIVE_FAILURES = 20  # 연속으로 이만큼 실패하면 차단이나 장애로 보고 중단합니다.
+# Spotify 응답에서 아티스트의 id와 uri가 비어 있는 항목의 ID입니다. (앨범 ID, 아티스트 이름) -> 아티스트 ID
+# 이름은 --locale ko 기준이며, 값은 get_artist로 조회해 이름이 같은지 확인한 것입니다.
+MISSING_ARTIST_IDS = {
+    ("1VYsQOFcP272bKe8XDARsW", "박진주"): "05AYUT9lXm5E4N2Z2wVlXm",
+    ("1VYsQOFcP272bKe8XDARsW", "에일리"): "3uGFTJ7JMllvhgGpumieHF",
+    ("1VYsQOFcP272bKe8XDARsW", "미주"): "3IA6AwJ26Mbs01YX5I1xjs",
+    ("1VYsQOFcP272bKe8XDARsW", "HAEWON"): "4suGbXz0FM8bO6YeC0E9no",
+    ("52n79yL8beXEHDu1GVfs1L", "샘김"): "4BBN286rBKyCWsSPq2cxYO",
+    ("2yyvWJA3GcvUwUtQ9XAzAK", "샘김"): "4BBN286rBKyCWsSPq2cxYO",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,6 +102,52 @@ def terminate_last_line(path: Path) -> None:
             return
     with path.open("a", encoding="utf-8") as file:
         file.write("\n")
+
+
+def fill_missing_artist_ids(path: Path) -> None:
+    """id와 uri가 모두 빈 아티스트에 MISSING_ARTIST_IDS의 ID를 채워 파일을 다시 씁니다. 바뀐 줄이 없으면 파일을 건드리지 않습니다."""
+    if not path.is_file():
+        return
+    filled = remaining = 0
+    lines: list[str] = []
+    changed = False
+
+    def fix(album_id: str, artists: list) -> bool:
+        nonlocal filled, remaining
+        touched = False
+        for artist in artists:
+            if artist.get("id") or artist.get("uri"):
+                continue
+            artist_id = MISSING_ARTIST_IDS.get((album_id, artist.get("name")))
+            if artist_id is None:
+                remaining += 1
+                continue
+            artist["id"] = artist_id
+            artist["uri"] = f"spotify:artist:{artist_id}"
+            filled += 1
+            touched = True
+        return touched
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            album = json.loads(line)["album"]
+            album_id = album["id"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            lines.append(line)  # 읽을 수 없는 줄은 그대로 둡니다.
+            continue
+        touched = fix(album_id, album.get("artists") or [])
+        for track in album.get("tracks") or []:
+            touched |= fix(album_id, track.get("artists") or [])
+        if touched:
+            changed = True
+            line = json.dumps({"album_id": json.loads(line)["album_id"], "album": album}, ensure_ascii=False)
+        lines.append(line)
+
+    if changed:
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(temporary, path)
+    print(f"아티스트 ID를 채운 항목 {filled:,}개, 아직 ID가 빈 항목 {remaining:,}개")
 
 
 async def fetch_all(args: argparse.Namespace, album_ids: list[str], already: int) -> None:
@@ -180,13 +241,14 @@ def main() -> None:
     if args.limit is not None:
         pending = pending[: args.limit]
         print(f"--limit에 따라 {len(pending):,}개만 조회합니다.")
-    if not pending:
+    if pending:
+        try:
+            asyncio.run(fetch_all(args, pending, already))
+        except KeyboardInterrupt:
+            raise SystemExit("즉시 종료했습니다. 기록된 앨범은 다시 조회하지 않습니다.")
+    else:
         print("조회할 앨범이 없습니다.")
-        return
-    try:
-        asyncio.run(fetch_all(args, pending, already))
-    except KeyboardInterrupt:
-        raise SystemExit("즉시 종료했습니다. 기록된 앨범은 다시 조회하지 않습니다.")
+    fill_missing_artist_ids(args.output)
 
 
 if __name__ == "__main__":
